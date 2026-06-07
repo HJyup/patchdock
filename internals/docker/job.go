@@ -15,23 +15,23 @@ type Job struct {
 	Path string
 }
 
-type Phase string
+type phase string
 
 const (
-	PhaseBuild Phase = "build"
-	PhaseRun   Phase = "run"
+	PhaseBuild phase = "build"
+	PhaseRun   phase = "run"
 )
 
 type LogLine struct {
 	ID     string
-	Phase  Phase  // "build" or "run" — set by Job.Run as it reads each sub-channel
+	Phase  phase  // "build" or "run" — set by Job.Run as it reads each sub-channel
 	Stream string // "stdout"/"stderr" — set by run.go's demuxer; empty for build
 	Text   string // the actual line
 }
 
 type Result struct {
 	ID       string
-	ExitCode int64 // meaningful only when Err == nil
+	ExitCode int64
 	Err      error // build/run failure; nil means the container ran to completion
 }
 
@@ -41,23 +41,6 @@ func NewJob(id, path string) (*Job, error) {
 	}
 
 	return &Job{ID: id, Path: path}, nil
-}
-
-// Check folder whether dockerfile exists in the folder
-func checkFolder(path string) error {
-	dPath := filepath.Join(path, "Dockerfile")
-	val, err := os.Stat(dPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("dockerfile doesn't exist: %w", err)
-		}
-		return fmt.Errorf("failed getting stat for folder: %w", err)
-	}
-	if val.IsDir() {
-		return errors.New("dockerfile is a folder")
-	}
-
-	return nil
 }
 
 func (j *Job) Run(ctx context.Context, cli *client.Client) (<-chan LogLine, <-chan Result) {
@@ -93,4 +76,21 @@ func (j *Job) Run(ctx context.Context, cli *client.Client) (<-chan LogLine, <-ch
 	}()
 
 	return logs, res
+}
+
+// Check folder whether dockerfile exists in the folder
+func checkFolder(path string) error {
+	dPath := filepath.Join(path, "Dockerfile")
+	val, err := os.Stat(dPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("dockerfile doesn't exist: %w", err)
+		}
+		return fmt.Errorf("failed getting stat for folder: %w", err)
+	}
+	if val.IsDir() {
+		return errors.New("dockerfile is a folder")
+	}
+
+	return nil
 }

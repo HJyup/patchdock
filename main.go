@@ -5,33 +5,10 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
-	"sync"
 
 	"github.com/HJyup/patchdock/internals/docker"
 	"github.com/HJyup/patchdock/internals/utils"
 )
-
-func fanIn[T any](channels ...<-chan T) <-chan T {
-	merged := make(chan T)
-	var wg sync.WaitGroup
-
-	for _, ch := range channels {
-		wg.Add(1)
-		go func(c <-chan T) {
-			defer wg.Done()
-			for msg := range c {
-				merged <- msg
-			}
-		}(ch)
-	}
-
-	go func() {
-		wg.Wait()
-		close(merged)
-	}()
-
-	return merged
-}
 
 func main() {
 	ctx := context.Background()
@@ -66,8 +43,8 @@ func main() {
 		resChans = append(resChans, jobRes)
 	}
 
-	logs := fanIn(logChans...)
-	results := fanIn(resChans...)
+	logs := utils.FanIn(logChans...)
+	results := utils.FanIn(resChans...)
 
 	// ANSI colors
 	const (

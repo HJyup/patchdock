@@ -6,8 +6,9 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/HJyup/patchdock/internals/docker"
-	"github.com/HJyup/patchdock/internals/utils"
+	"github.com/HJyup/patchdock/internal/docker"
+	"github.com/HJyup/patchdock/internal/utils"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -26,7 +27,7 @@ func main() {
 
 	var jobs []*docker.Job
 	for _, path := range jobDefs {
-		id := fmt.Sprintf("%s-%s", filepath.Base(path), utils.RandomID(6))
+		id := fmt.Sprintf("%s-%s", filepath.Base(path), uuid.New().String())
 		job, err := docker.NewJob(id, path)
 		if err != nil {
 			log.Fatalf("failed to schedule job: %v", err)

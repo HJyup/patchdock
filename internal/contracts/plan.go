@@ -47,8 +47,6 @@ type Step struct {
 	FilesToModify []string `json:"files_to_modify,omitempty"`
 }
 
-// Validate reports every broken invariant at once, each error naming the
-// offending field.
 func (s *Step) Validate() error { return validateStruct(s, "step") }
 
 // NewPlan completes a caller-assembled Plan and validates it. A zero ID and
@@ -68,6 +66,4 @@ func NewPlan(p Plan) (Plan, error) {
 	return p, nil
 }
 
-// Validate reports every broken invariant at once, each error naming the
-// offending field.
 func (p *Plan) Validate() error { return validateStruct(p, "plan") }

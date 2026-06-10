@@ -50,7 +50,9 @@ type StepResult struct {
 
 // Validate reports every broken invariant at once, each error naming the
 // offending field.
-func (s *StepResult) Validate() error { return validateStruct(s, "step_result") }
+func (s *StepResult) Validate() error {
+	return validateStruct(s, "step_result")
+}
 
 // ExecutionError is a harness-level failure during execution.
 type ExecutionError struct {
@@ -59,9 +61,9 @@ type ExecutionError struct {
 	Message string `json:"message" validate:"required"`
 }
 
-// Validate reports every broken invariant at once, each error naming the
-// offending field.
-func (e *ExecutionError) Validate() error { return validateStruct(e, "execution_error") }
+func (e *ExecutionError) Validate() error {
+	return validateStruct(e, "execution_error")
+}
 
 // NewExecutionResult completes a caller-assembled ExecutionResult and
 // validates it. A zero ID is generated; a set ID is kept for determinism.
@@ -75,9 +77,6 @@ func NewExecutionResult(e ExecutionResult) (ExecutionResult, error) {
 	return e, nil
 }
 
-// Validate reports every broken invariant at once, each error naming the
-// offending field. Correlation with the producing Plan is checked
-// separately by ValidateAgainst.
 func (e *ExecutionResult) Validate() error {
 	return validateStruct(e, "execution_result")
 }

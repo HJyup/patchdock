@@ -22,6 +22,4 @@ type TokenUsage struct {
 	Output int `json:"output" validate:"gte=0"`
 }
 
-// Validate reports every broken invariant at once, each error naming the
-// offending field.
 func (t *TokenUsage) Validate() error { return validateStruct(t, "token_usage") }

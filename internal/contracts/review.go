@@ -48,9 +48,9 @@ type ReviewIssue struct {
 	Suggestion string `json:"suggestion,omitempty"`
 }
 
-// Validate reports every broken invariant at once, each error naming the
-// offending field.
-func (r *ReviewIssue) Validate() error { return validateStruct(r, "review_issue") }
+func (r *ReviewIssue) Validate() error {
+	return validateStruct(r, "review_issue")
+}
 
 // IssueSeverity grades how blocking an issue is.
 type IssueSeverity string
@@ -78,8 +78,7 @@ func NewReviewFeedback(r ReviewFeedback) (ReviewFeedback, error) {
 	return r, nil
 }
 
-// Validate reports every broken invariant at once, each error naming the
-// offending field.
 func (r *ReviewFeedback) Validate() error {
+
 	return validateStruct(r, "review_feedback")
 }

@@ -34,3 +34,4 @@ go.work.sum
 # Specific for the project
 example-projects/
 *INFO.MD
+*PLAN.MD

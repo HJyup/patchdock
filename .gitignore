@@ -31,7 +31,10 @@ go.work.sum
 .idea/
 .vscode/
 
-# Specific for the project
+# Specifics for the project
 example-projects/
 *INFO.MD
-*PLAN.MD
+PLAN.MD
+
+# Executable
+patchdock

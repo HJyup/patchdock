@@ -32,7 +32,7 @@ go.work.sum
 .vscode/
 
 # Specifics for the project
-example-projects/
+project-demo/
 *INFO.MD
 PLAN.MD
 

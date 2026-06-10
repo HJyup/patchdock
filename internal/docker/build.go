@@ -23,40 +23,44 @@ type buildOutput struct {
 	} `json:"aux"`
 }
 
-type buildResult struct {
-	ImageID string
-	Err     error
-}
-
 // Build creates a Docker image from the given path and returns two channels:
 // logs streams build output lines, result emits a single buildResult with
 // the final ImageID or an error. Both channels are closed when the build completes
-func build(ctx context.Context, cli *client.Client, path string) (<-chan string, <-chan buildResult) {
-	logs, result := make(chan string), make(chan buildResult, 1)
+func build(ctx context.Context, cli *client.Client, spec BuildSpec) (<-chan LogLine, <-chan BuildResult) {
+	logs, result := make(chan LogLine), make(chan BuildResult, 1)
 
 	go func() {
 		defer close(logs)
 		defer close(result)
 
-		tarCxt, err := tarDir(path)
+		tarCxt, err := tarDir(spec.ContextDir)
 		if err != nil {
-			result <- buildResult{Err: fmt.Errorf("failed to tar a folder: %w", err)}
+			result <- BuildResult{Err: fmt.Errorf("failed to tar a folder: %w", err)}
 			return
 		}
 		defer tarCxt.Close()
 
-		img, err := cli.ImageBuild(ctx, tarCxt, dockerBuild.ImageBuildOptions{
-			ForceRemove: true,
-		})
+		opts := dockerBuild.ImageBuildOptions{ForceRemove: true}
+		if spec.Tag != "" {
+			opts.Tags = []string{spec.Tag}
+		}
+		if spec.Dockerfile != "" {
+			opts.Dockerfile = spec.Dockerfile
+		}
+		img, err := cli.ImageBuild(ctx, tarCxt, opts)
+
 		if err != nil {
-			result <- buildResult{Err: fmt.Errorf("failed to start image build: %w", err)}
+			result <- BuildResult{Err: fmt.Errorf("failed to start image build: %w", err)}
 			return
 		}
 		defer img.Body.Close()
 
 		streamLogs, streamResult := streamBuildLogs(img.Body)
 		for msg := range streamLogs {
-			logs <- msg
+			logs <- LogLine{
+				Stream: "",
+				Text:   msg,
+			}
 		}
 
 		result <- <-streamResult
@@ -65,8 +69,8 @@ func build(ctx context.Context, cli *client.Client, path string) (<-chan string,
 	return logs, result
 }
 
-func streamBuildLogs(body io.Reader) (<-chan string, <-chan buildResult) {
-	logs, result := make(chan string), make(chan buildResult, 1)
+func streamBuildLogs(body io.Reader) (<-chan string, <-chan BuildResult) {
+	logs, result := make(chan string), make(chan BuildResult, 1)
 
 	go func() {
 		var imageID string
@@ -85,12 +89,12 @@ func streamBuildLogs(body io.Reader) (<-chan string, <-chan buildResult) {
 			}
 
 			if err != nil {
-				result <- buildResult{Err: fmt.Errorf("build stream failed: %w", err)}
+				result <- BuildResult{Err: fmt.Errorf("build stream failed: %w", err)}
 				return
 			}
 
 			if out.Error != "" {
-				result <- buildResult{Err: fmt.Errorf("docker build failed: %s", out.Error)}
+				result <- BuildResult{Err: fmt.Errorf("docker build failed: %s", out.Error)}
 				return
 			}
 
@@ -103,7 +107,7 @@ func streamBuildLogs(body io.Reader) (<-chan string, <-chan buildResult) {
 			}
 		}
 
-		result <- buildResult{ImageID: imageID}
+		result <- BuildResult{ImageID: imageID}
 	}()
 
 	return logs, result

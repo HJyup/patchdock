@@ -1,4 +1,4 @@
-package contracts
+package types
 
 import (
 	"errors"
@@ -17,7 +17,7 @@ func newContractValidator() *validator.Validate {
 	v.RegisterTagNameFunc(jsonFieldName)
 	v.RegisterStructValidation(validatePlan, Plan{})
 	v.RegisterStructValidation(validateExecutionResult, ExecutionResult{})
-	v.RegisterStructValidation(validateReviewFeedback, ReviewFeedback{})
+	v.RegisterStructValidation(validateReview, Review{})
 	return v
 }
 
@@ -96,8 +96,8 @@ func validateExecutionResult(sl validator.StructLevel) {
 	}
 }
 
-func validateReviewFeedback(sl validator.StructLevel) {
-	r := sl.Current().Interface().(ReviewFeedback)
+func validateReview(sl validator.StructLevel) {
+	r := sl.Current().Interface().(Review)
 	switch r.Decision {
 	case ReviewReject:
 		if len(r.Issues) == 0 {

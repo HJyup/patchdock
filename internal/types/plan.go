@@ -1,14 +1,16 @@
-package contracts
+package types
 
-import "time"
+import (
+	"time"
+
+	"github.com/HJyup/patchdock/internal/utils"
+)
 
 // Plan is the planner stage's output: an ordered, immutable description of
 // the work the executor should attempt for a single task attempt.
 type Plan struct {
-	ID string `json:"id" validate:"required"`
-
-	// TaskID groups all artifacts (plans, executions, reviews) for one task run.
-	TaskID    TaskID    `json:"task_id" validate:"required"`
+	ID        string    `json:"id" validate:"required"`
+	TaskID    string    `json:"task_id" validate:"required"`
 	CreatedAt time.Time `json:"created_at" validate:"required"`
 
 	// Approach is the planner's 1-3 sentence summary of the overall strategy.
@@ -27,8 +29,7 @@ type Plan struct {
 	Context []string `json:"context,omitempty"`
 
 	// Assumptions the planner made that may not hold at execution time.
-	Assumptions []string   `json:"assumptions,omitempty"`
-	TokensUsed  TokenUsage `json:"tokens_used"`
+	Assumptions []string `json:"assumptions,omitempty"`
 }
 
 // Step is one unit of work in a Plan. The executor produces one StepResult
@@ -42,28 +43,24 @@ type Step struct {
 	// leave it empty.
 	Rationale string `json:"rationale"`
 
-	// FilesToModify is the planner's intent. Executor may modify additional
-	// files but the reviewer can flag deviations. (saves tokens)
+	// FilesToModify is the planner's intent.
+	// Executor may modify additional files
 	FilesToModify []string `json:"files_to_modify,omitempty"`
 }
 
-func (s *Step) Validate() error { return validateStruct(s, "step") }
-
-// NewPlan completes a caller-assembled Plan and validates it. A zero ID and
-// CreatedAt are generated; values already set are kept, so fixtures and
-// tests can pin them for determinism. This is the only sanctioned way to
-// produce a Plan outside decoding one at a stage boundary.
 func NewPlan(p Plan) (Plan, error) {
 	if p.ID == "" {
-		p.ID = newID("plan")
+		p.ID = utils.NewID("plan")
 	}
 	if p.CreatedAt.IsZero() {
 		p.CreatedAt = time.Now().UTC()
 	}
-	if err := p.Validate(); err != nil {
+	if err := p.validate(); err != nil {
 		return Plan{}, err
 	}
 	return p, nil
 }
 
-func (p *Plan) Validate() error { return validateStruct(p, "plan") }
+func (p *Plan) validate() error {
+	return validateStruct(p, "plan")
+}

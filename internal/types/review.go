@@ -1,12 +1,14 @@
-package contracts
+package types
 
-// ReviewFeedback is the reviewer stage's output for one ExecutionResult.
+import "github.com/HJyup/patchdock/internal/utils"
+
+// Review is the reviewer stage's output for one ExecutionResult.
 //
 // When Decision is Reject, the payload must carry enough structured info
 // for the executor's next attempt to be productive.
-type ReviewFeedback struct {
+type Review struct {
 	ID          string         `json:"id" validate:"required"`
-	TaskID      TaskID         `json:"task_id" validate:"required"`
+	TaskID      string         `json:"task_id" validate:"required"`
 	ExecutionID string         `json:"execution_id" validate:"required"`
 	Decision    ReviewDecision `json:"decision" validate:"required,oneof=accept reject"`
 
@@ -14,8 +16,7 @@ type ReviewFeedback struct {
 	// Empty when Decision is Accept.
 	Issues []ReviewIssue `json:"issues,omitempty" validate:"dive"`
 
-	Summary    string     `json:"summary" validate:"required"`
-	TokensUsed TokenUsage `json:"tokens_used"`
+	Summary string `json:"summary" validate:"required"`
 }
 
 // ReviewDecision is the action the orchestrator should take next.
@@ -48,10 +49,6 @@ type ReviewIssue struct {
 	Suggestion string `json:"suggestion,omitempty"`
 }
 
-func (r *ReviewIssue) Validate() error {
-	return validateStruct(r, "review_issue")
-}
-
 // IssueSeverity grades how blocking an issue is.
 type IssueSeverity string
 
@@ -66,19 +63,16 @@ const (
 	SeverityMinor IssueSeverity = "minor"
 )
 
-// NewReviewFeedback completes a caller-assembled ReviewFeedback and
-// validates it. A zero ID is generated; a set ID is kept for determinism.
-func NewReviewFeedback(r ReviewFeedback) (ReviewFeedback, error) {
+func NewReview(r Review) (Review, error) {
 	if r.ID == "" {
-		r.ID = newID("review")
+		r.ID = utils.NewID("review")
 	}
-	if err := r.Validate(); err != nil {
-		return ReviewFeedback{}, err
+	if err := r.validate(); err != nil {
+		return Review{}, err
 	}
 	return r, nil
 }
 
-func (r *ReviewFeedback) Validate() error {
-
-	return validateStruct(r, "review_feedback")
+func (r *Review) validate() error {
+	return validateStruct(r, "review")
 }

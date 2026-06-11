@@ -1,4 +1,6 @@
-package contracts
+package types
+
+import "github.com/HJyup/patchdock/internal/utils"
 
 // ExecutionResult is the executor stage's output for one Plan attempt.
 //
@@ -7,7 +9,7 @@ package contracts
 type ExecutionResult struct {
 	ID string `json:"id" validate:"required"`
 
-	TaskID TaskID          `json:"task_id" validate:"required"`
+	TaskID string          `json:"task_id" validate:"required"`
 	PlanID string          `json:"plan_id" validate:"required"`
 	Status ExecutionStatus `json:"status" validate:"required,oneof=success partial_success failed"`
 
@@ -20,8 +22,7 @@ type ExecutionResult struct {
 	StepResults []StepResult `json:"step_results" validate:"dive"`
 
 	// Errors records things that went wrong during execution. (Not opinions about the output)
-	Errors     []ExecutionError `json:"errors,omitempty" validate:"dive"`
-	TokensUsed TokenUsage       `json:"tokens_used"`
+	Errors []ExecutionError `json:"errors,omitempty" validate:"dive"`
 }
 
 // ExecutionStatus summarizes the outcome of an execution attempt.
@@ -48,12 +49,6 @@ type StepResult struct {
 	Notes string `json:"notes,omitempty"`
 }
 
-// Validate reports every broken invariant at once, each error naming the
-// offending field.
-func (s *StepResult) Validate() error {
-	return validateStruct(s, "step_result")
-}
-
 // ExecutionError is a harness-level failure during execution.
 type ExecutionError struct {
 	// StepID, if set, scopes the error to one Step. Empty means whole-execution.
@@ -61,22 +56,18 @@ type ExecutionError struct {
 	Message string `json:"message" validate:"required"`
 }
 
-func (e *ExecutionError) Validate() error {
-	return validateStruct(e, "execution_error")
-}
-
 // NewExecutionResult completes a caller-assembled ExecutionResult and
 // validates it. A zero ID is generated; a set ID is kept for determinism.
 func NewExecutionResult(e ExecutionResult) (ExecutionResult, error) {
 	if e.ID == "" {
-		e.ID = newID("exec")
+		e.ID = utils.NewID("exec")
 	}
-	if err := e.Validate(); err != nil {
+	if err := e.validate(); err != nil {
 		return ExecutionResult{}, err
 	}
 	return e, nil
 }
 
-func (e *ExecutionResult) Validate() error {
+func (e *ExecutionResult) validate() error {
 	return validateStruct(e, "execution_result")
 }

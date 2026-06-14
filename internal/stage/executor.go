@@ -16,7 +16,7 @@ type ExecutorOpts struct {
 	AgentsDir    string
 }
 
-func RunExecutor(ctx context.Context, c *docker.Client, input types.Plan, exOpts ExecutorOpts) (types.ExecutionResult, error) {
+func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exOpts ExecutorOpts) (types.ExecutionResult, error) {
 	var mounts []docker.Mount
 	if exOpts.WorkspaceDir != "" {
 		mounts = append(mounts, docker.Mount{Source: exOpts.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: false})
@@ -25,7 +25,7 @@ func RunExecutor(ctx context.Context, c *docker.Client, input types.Plan, exOpts
 	raw, err := runStage(ctx, c, opts{
 		image:      exOpts.Image,
 		stage:      types.StageExecutor,
-		taskID:     input.TaskID,
+		taskID:     input.Plan.TaskID,
 		dir:        exOpts.Dir,
 		mounts:     mounts,
 		agentsPath: exOpts.AgentsDir,
@@ -39,8 +39,8 @@ func RunExecutor(ctx context.Context, c *docker.Client, input types.Plan, exOpts
 		return types.ExecutionResult{}, ErrOutputNotJSON{Err: err}
 	}
 
-	ex.TaskID = input.TaskID
-	ex.PlanID = input.ID
+	ex.TaskID = input.Plan.ID
+	ex.PlanID = input.Plan.ID
 
 	res, err := types.NewExecutionResult(ex)
 	if err != nil {

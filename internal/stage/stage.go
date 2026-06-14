@@ -13,10 +13,12 @@ import (
 )
 
 const (
-	input        = "input.json"
-	output       = "output.json"
-	IOTarget     = "/io"
-	AgentsTarget = "/agents"
+	input           = "input.json"
+	output          = "output.json"
+	IOTarget        = "/io"
+	AgentsTarget    = "/agents"
+	RepoTarget      = "/repo"
+	WorkspaceTarget = "/workspace"
 )
 
 type opts struct {
@@ -45,7 +47,7 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 	agentMount := docker.Mount{
 		Source:   op.agentsPath,
 		Target:   AgentsTarget,
-		ReadOnly: false,
+		ReadOnly: true,
 	}
 
 	mounts := make([]docker.Mount, 0, len(op.mounts)+2)

@@ -82,9 +82,10 @@ func runPlannerProof(ctx context.Context, prompt string) error {
 	exchangeDir := filepath.Join(exchangeParent, "planner-1")
 
 	plan, err := stage.RunPlanner(ctx, c, stage.PlannerInput{Task: task}, stage.PlannerOpts{
-		Image:   defaultAgentImage,
-		Dir:     exchangeDir,
-		RepoDir: repoAbs,
+		Image:     defaultAgentImage,
+		Dir:       exchangeDir,
+		RepoDir:   repoAbs,
+		AgentsDir: repoAbs,
 	})
 	if err != nil {
 		return fmt.Errorf("planner stage: %w", err)

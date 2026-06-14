@@ -3,7 +3,6 @@ package stage
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
@@ -14,23 +13,23 @@ type PlannerOpts struct {
 	Dir   string
 	// RepoDir, when set, is the target repository mounted read-only at /repo
 	// so the planner can explore the code it plans against.
-	RepoDir string
+	RepoDir   string
+	AgentsDir string
 }
 
 func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpts PlannerOpts) (types.Plan, error) {
 	var mounts []docker.Mount
 	if plOpts.RepoDir != "" {
-		mounts = append(mounts, docker.Mount{Source: plOpts.RepoDir, Target: "/repo", ReadOnly: true})
+		mounts = append(mounts, docker.Mount{Source: plOpts.RepoDir, Target: RepoTarget, ReadOnly: true})
 	}
 
-	agentsPath := filepath.Join(plOpts.RepoDir, ".patchdock")
 	raw, err := runStage(ctx, c, opts{
 		image:      plOpts.Image,
 		stage:      types.StagePlanner,
 		taskID:     input.Task.ID,
 		dir:        plOpts.Dir,
 		mounts:     mounts,
-		agentsPath: agentsPath,
+		agentsPath: plOpts.AgentsDir,
 	}, input)
 	if err != nil {
 		return types.Plan{}, err

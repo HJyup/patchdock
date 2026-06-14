@@ -1,0 +1,25 @@
+import type { Stage, StageContext } from "../context.ts";
+import type { Plan, PlannerInput } from "../types.ts";
+import { z } from "zod";
+
+export const reviewerDefinitionSchema = z.object({
+  stage: z.literal("reviewer"),
+  run: z.custom<ReviewerConfig["run"]>((value) => typeof value === "function", {
+    message: "run must be a function",
+  }),
+});
+
+interface ReviewerConfig {
+  run: (ctx: StageContext, input: PlannerInput) => Promise<Plan>;
+}
+
+interface Reviewer extends ReviewerConfig {
+  stage: Stage;
+}
+
+export function defineReviewer(config: ReviewerConfig): Reviewer {
+  return {
+    stage: "reviewer",
+    run: config.run,
+  };
+}

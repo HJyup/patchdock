@@ -3,6 +3,7 @@ package stage
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
@@ -22,12 +23,14 @@ func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpt
 		mounts = append(mounts, docker.Mount{Source: plOpts.RepoDir, Target: "/repo", ReadOnly: true})
 	}
 
+	agentsPath := filepath.Join(plOpts.RepoDir, ".patchdock")
 	raw, err := runStage(ctx, c, opts{
-		image:  plOpts.Image,
-		stage:  types.StagePlanner,
-		taskID: input.Task.ID,
-		dir:    plOpts.Dir,
-		mounts: mounts,
+		image:      plOpts.Image,
+		stage:      types.StagePlanner,
+		taskID:     input.Task.ID,
+		dir:        plOpts.Dir,
+		mounts:     mounts,
+		agentsPath: agentsPath,
 	}, input)
 	if err != nil {
 		return types.Plan{}, err

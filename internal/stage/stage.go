@@ -13,16 +13,19 @@ import (
 )
 
 const (
-	input  = "input.json"
-	output = "output.json"
+	input        = "input.json"
+	output       = "output.json"
+	IOTarget     = "/io"
+	AgentsTarget = "/agents"
 )
 
 type opts struct {
-	image  string
-	stage  types.StageName
-	taskID string
-	dir    string // Used to create /io mount
-	mounts []docker.Mount
+	image      string
+	stage      types.StageName
+	taskID     string
+	dir        string
+	mounts     []docker.Mount
+	agentsPath string
 }
 
 func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]byte, error) {
@@ -32,18 +35,31 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 
 	ioMount := docker.Mount{
 		Source:   op.dir,
-		Target:   "/io",
+		Target:   IOTarget,
 		ReadOnly: false,
 	}
 
-	mounts := make([]docker.Mount, 0, len(op.mounts)+1)
+	// Mounts agents ts files from the .patchdock.
+	// Yeah, we have .patchdock already from ./repo mount but what if we wanna define a new stage where
+	// repo is not used? So it's better not to try to parse them from there.
+	agentMount := docker.Mount{
+		Source:   op.agentsPath,
+		Target:   AgentsTarget,
+		ReadOnly: false,
+	}
+
+	mounts := make([]docker.Mount, 0, len(op.mounts)+2)
 	for _, mount := range op.mounts {
-		if mount.Target == "/io" {
-			return nil, errors.New("mount target /io is reserved for the exchange dir")
+		if mount.Target == IOTarget {
+			return nil, fmt.Errorf("mount target %v is reserved for the exchange dir", IOTarget)
+		}
+		if mount.Target == AgentsTarget {
+			return nil, fmt.Errorf("mount target %v is reserved for the agents definitions", AgentsTarget)
 		}
 		mounts = append(mounts, mount)
 	}
 	mounts = append(mounts, ioMount)
+	mounts = append(mounts, agentMount)
 
 	byteSlice, err := json.Marshal(inputCnt)
 	if err != nil {
@@ -58,9 +74,12 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 
 	// logs will be then logging to a separate file
 	logs, runRes := c.Run(ctx, docker.RunSpec{
-		Image:      op.image,
-		Mounts:     mounts,
-		Env:        map[string]string{"PATCHDOCK_STAGE": string(op.stage)},
+		Image:  op.image,
+		Mounts: mounts,
+		Env: map[string]string{
+			"PATCHDOCK_STAGE":   string(op.stage),
+			"PATCHDOCK_TASK_ID": op.taskID,
+		},
 		Labels:     map[string]string{"patchdock.task-id": op.taskID},
 		Entrypoint: nil,
 	})

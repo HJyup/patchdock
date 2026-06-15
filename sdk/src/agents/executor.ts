@@ -1,5 +1,5 @@
 import type { Stage, StageContext } from "../context.ts";
-import type { Plan, PlannerInput } from "../types.ts";
+import type { ExecutionResultData, ExecutorInput } from "../types.ts";
 import { z } from "zod";
 
 export const executorDefinitionSchema = z.object({
@@ -10,7 +10,7 @@ export const executorDefinitionSchema = z.object({
 });
 
 interface ExecutorConfig {
-  run: (ctx: StageContext, input: PlannerInput) => Promise<Plan>;
+  run: (ctx: StageContext, input: ExecutorInput) => Promise<ExecutionResultData>;
 }
 
 interface Executor extends ExecutorConfig {

@@ -1,4 +1,11 @@
-import { plannerInputSchema, planSchema } from "../../src/types.ts";
+import {
+  plannerInputSchema,
+  executorInputSchema,
+  reviewerInputSchema,
+  planDataSchema,
+  executionResultDataSchema,
+  reviewDataSchema,
+} from "../../src/types.ts";
 import type { Stage } from "../../src/context.ts";
 import { z } from "zod";
 
@@ -7,9 +14,9 @@ export const IO_PATH = "/io";
 export const INPUT_FILE = "input.json";
 export const OUTPUT_FILE = "output.json";
 
-// Specification of what we expect as input/output for IO mount
+// What crosses /io per stage.
 export const SPECS = {
-  planner: { input: plannerInputSchema, output: planSchema },
-  executor: { input: plannerInputSchema, output: planSchema },
-  reviewer: { input: plannerInputSchema, output: planSchema },
+  planner: { input: plannerInputSchema, output: planDataSchema },
+  executor: { input: executorInputSchema, output: executionResultDataSchema },
+  reviewer: { input: reviewerInputSchema, output: reviewDataSchema },
 } satisfies Record<Stage, { input: z.ZodTypeAny; output: z.ZodTypeAny }>;

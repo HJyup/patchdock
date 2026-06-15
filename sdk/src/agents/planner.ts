@@ -1,5 +1,5 @@
 import type { Stage, StageContext } from "../context.ts";
-import type { Plan, PlannerInput } from "../types.ts";
+import type { PlanData, PlannerInput } from "../types.ts";
 import { z } from "zod";
 
 export const plannerDefinitionSchema = z.object({
@@ -10,7 +10,7 @@ export const plannerDefinitionSchema = z.object({
 });
 
 interface PlannerConfig {
-  run: (ctx: StageContext, input: PlannerInput) => Promise<Plan>;
+  run: (ctx: StageContext, input: PlannerInput) => Promise<PlanData>;
 }
 
 interface Planner extends PlannerConfig {

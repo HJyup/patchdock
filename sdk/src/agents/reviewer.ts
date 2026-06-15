@@ -1,5 +1,5 @@
 import type { Stage, StageContext } from "../context.ts";
-import type { Plan, PlannerInput } from "../types.ts";
+import type { ReviewData, ReviewerInput } from "../types.ts";
 import { z } from "zod";
 
 export const reviewerDefinitionSchema = z.object({
@@ -10,7 +10,7 @@ export const reviewerDefinitionSchema = z.object({
 });
 
 interface ReviewerConfig {
-  run: (ctx: StageContext, input: PlannerInput) => Promise<Plan>;
+  run: (ctx: StageContext, input: ReviewerInput) => Promise<ReviewData>;
 }
 
 interface Reviewer extends ReviewerConfig {

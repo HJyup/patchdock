@@ -73,8 +73,10 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 
 	out.Plan = plan
-	var execRes []types.ExecutionResult
-	var revs []types.Review
+	// Go marshalls declarations into nil (which is okay), but in sdk we expect empty array,
+	// for know we just declare empty arrays
+	execRes := []types.ExecutionResult{}
+	revs := []types.Review{}
 
 	// 0 - first actual try (it doesn't count as a retry)
 	for attempts := 0; attempts <= p.maxRetries; attempts++ {

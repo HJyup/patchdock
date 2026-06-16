@@ -16,7 +16,6 @@ func newContractValidator() *validator.Validate {
 	v := validator.New(validator.WithRequiredStructEnabled())
 	v.RegisterTagNameFunc(jsonFieldName)
 	v.RegisterStructValidation(validatePlan, Plan{})
-	v.RegisterStructValidation(validateExecutionResult, ExecutionResult{})
 	v.RegisterStructValidation(validateReview, Review{})
 	return v
 }
@@ -83,16 +82,6 @@ func validatePlan(sl validator.StructLevel) {
 			continue
 		}
 		seen[step.ID] = i
-	}
-}
-
-func validateExecutionResult(sl validator.StructLevel) {
-	e := sl.Current().Interface().(ExecutionResult)
-	if e.Status != ExecutionSuccess && e.Status != ExecutionPartialSuccess {
-		return
-	}
-	if strings.TrimSpace(e.Patch) == "" {
-		sl.ReportError(e.Patch, "patch", "Patch", "patch_required", string(e.Status))
 	}
 }
 

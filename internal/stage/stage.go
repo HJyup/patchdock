@@ -87,7 +87,8 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 	})
 
 	// For know, just skip
-	for range logs {
+	for msg := range logs {
+		fmt.Println(msg)
 	}
 
 	res := <-runRes

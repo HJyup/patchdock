@@ -9,6 +9,7 @@ import (
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/stage"
 	"github.com/HJyup/patchdock/internal/types"
+	"github.com/HJyup/patchdock/internal/workspace"
 )
 
 type Pipeline struct {
@@ -58,9 +59,11 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 
 	tempIO, err := os.MkdirTemp("", "patchdock-io-*")
+	fmt.Println(tempIO)
 	if err != nil {
 		return out, fmt.Errorf("create exchange parent: %w", err)
 	}
+	defer os.RemoveAll(tempIO)
 
 	plan, err := stage.RunPlanner(ctx, p.cli, stage.PlannerInput{Task: task}, stage.PlannerOpts{
 		Image:     p.image,
@@ -78,6 +81,11 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	execRes := []types.ExecutionResult{}
 	revs := []types.Review{}
 
+	wks, err := workspace.NewWorkspace(p.repoDir, filepath.Join(tempIO, "work"))
+	if err != nil {
+		return out, fmt.Errorf("failed to create a workspace: %w", err)
+	}
+
 	// 0 - first actual try (it doesn't count as a retry)
 	for attempts := 0; attempts <= p.maxRetries; attempts++ {
 		res, err := stage.RunExecutor(ctx, p.cli, stage.ExecutorInput{
@@ -86,13 +94,19 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 		}, stage.ExecutorOpts{
 			Image:        p.image,
 			Dir:          filepath.Join(tempIO, fmt.Sprintf("executor-%v", attempts)),
-			WorkspaceDir: "",
+			WorkspaceDir: wks.Dir,
 			AgentsDir:    p.agentsDir,
 		})
-
 		if err != nil {
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
+
+		diff, err := wks.Diff()
+		if err != nil {
+			return out, fmt.Errorf("executor stage (failed computing diffs): %w", err)
+		}
+		res.Patch = diff
+		fmt.Println(diff)
 
 		execRes = append(execRes, res)
 		out.Execution = res
@@ -104,7 +118,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 		}, stage.ReviewerOpts{
 			Image:        p.image,
 			Dir:          filepath.Join(tempIO, fmt.Sprintf("review-%v", attempts)),
-			WorkspaceDir: "",
+			WorkspaceDir: wks.Dir,
 			AgentsDir:    p.agentsDir,
 		})
 

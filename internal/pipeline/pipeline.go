@@ -3,8 +3,6 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/stage"
@@ -40,34 +38,26 @@ func NewPipeline(cli *docker.Client, image, repoDir, agentsDir string, maxRetrie
 }
 
 func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
+	err := p.validateEnv(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	env, err := newTaskEnv()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize task environment: %w", err)
+	}
+	defer env.Cleanup()
+
+	// Base outcome which will be populated after each stage
 	out := &Outcome{
 		TaskID:   task.ID,
 		Accepted: false,
 	}
 
-	if p.maxRetries < 0 {
-		return out, fmt.Errorf("maximum amount of retries is incorrect: %v", p.maxRetries)
-	}
-
-	exists, err := p.cli.ImageExists(ctx, p.image)
-	if err != nil {
-		return out, err
-	}
-
-	if !exists {
-		return out, fmt.Errorf("image %q not found — build it first:\n  docker build -t %s sdk/", p.image, p.repoDir)
-	}
-
-	tempIO, err := os.MkdirTemp("", "patchdock-io-*")
-	fmt.Println(tempIO)
-	if err != nil {
-		return out, fmt.Errorf("create exchange parent: %w", err)
-	}
-	defer os.RemoveAll(tempIO)
-
 	plan, err := stage.RunPlanner(ctx, p.cli, stage.PlannerInput{Task: task}, stage.PlannerOpts{
 		Image:     p.image,
-		Dir:       filepath.Join(tempIO, "planner"),
+		Dir:       env.PlannerPath(),
 		RepoDir:   p.repoDir,
 		AgentsDir: p.agentsDir,
 	})
@@ -76,24 +66,20 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 
 	out.Plan = plan
-	// Go marshalls declarations into nil (which is okay), but in sdk we expect empty array,
-	// for know we just declare empty arrays
-	execRes := []types.ExecutionResult{}
-	revs := []types.Review{}
+	history := newHistory()
 
-	wks, err := workspace.NewWorkspace(p.repoDir, filepath.Join(tempIO, "work"))
+	wks, err := workspace.NewWorkspace(p.repoDir, env.WorkspacePath())
 	if err != nil {
 		return out, fmt.Errorf("failed to create a workspace: %w", err)
 	}
 
-	// 0 - first actual try (it doesn't count as a retry)
-	for attempts := 0; attempts <= p.maxRetries; attempts++ {
+	for attempt := 0; attempt <= p.maxRetries; attempt++ {
 		res, err := stage.RunExecutor(ctx, p.cli, stage.ExecutorInput{
 			Plan:    plan,
-			Reviews: revs,
+			Reviews: history.Reviews,
 		}, stage.ExecutorOpts{
 			Image:        p.image,
-			Dir:          filepath.Join(tempIO, fmt.Sprintf("executor-%v", attempts)),
+			Dir:          env.ExecutorPath(attempt),
 			WorkspaceDir: wks.Dir,
 			AgentsDir:    p.agentsDir,
 		})
@@ -101,34 +87,32 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
 
-		diff, err := wks.Diff()
+		diff, err := wks.Diff(ctx)
 		if err != nil {
 			return out, fmt.Errorf("executor stage (failed computing diffs): %w", err)
 		}
 		res.Patch = diff
-		fmt.Println(diff)
 
-		execRes = append(execRes, res)
+		history.AddExecution(res)
 		out.Execution = res
 
 		rev, err := stage.RunReviewer(ctx, p.cli, stage.ReviewerInput{
 			Plan:             plan,
-			ExecutionResults: execRes,
-			PreviousReviews:  revs,
+			ExecutionResults: history.Executions,
+			PreviousReviews:  history.Reviews,
 		}, stage.ReviewerOpts{
 			Image:        p.image,
-			Dir:          filepath.Join(tempIO, fmt.Sprintf("review-%v", attempts)),
+			Dir:          env.ReviewPath(attempt),
 			WorkspaceDir: wks.Dir,
 			AgentsDir:    p.agentsDir,
 		})
-
 		if err != nil {
 			return out, fmt.Errorf("reviewer reviewer: %w", err)
 		}
 
-		revs = append(revs, rev)
+		history.AddReview(rev)
 		out.Review = rev
-		out.Attempts = len(execRes)
+		out.Attempts = len(history.Executions)
 
 		if rev.Decision == types.ReviewAccept {
 			out.Accepted = true
@@ -137,4 +121,21 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 
 	return out, nil
+}
+
+func (p *Pipeline) validateEnv(ctx context.Context) error {
+	if p.maxRetries < 0 {
+		return fmt.Errorf("maximum amount of retries is incorrect: %v", p.maxRetries)
+	}
+
+	exists, err := p.cli.ImageExists(ctx, p.image)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		return fmt.Errorf("image %q not found — build it first:\n  docker build -t %s sdk/", p.image, p.repoDir)
+	}
+
+	return nil
 }

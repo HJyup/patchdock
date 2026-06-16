@@ -15,48 +15,60 @@ type Workspace struct {
 }
 
 func NewWorkspace(repoDir, dstDir string) (*Workspace, error) {
-	cloneCmd := exec.Command("git", "clone", "--local", repoDir, dstDir)
-	var errBuf bytes.Buffer
-	cloneCmd.Stderr = &errBuf
-
-	if err := cloneCmd.Run(); err != nil {
-		return nil, fmt.Errorf("Clone failed: %v\nError: %s\n", err, errBuf.String())
+	if err := gitClone(repoDir, dstDir); err != nil {
+		return nil, fmt.Errorf("failed to initialize workspace sandbox: %w", err)
 	}
 
-	revCmd := exec.Command("git", "rev-parse", "HEAD")
-	revCmd.Dir = dstDir
-
-	baseCommitBytes, err := revCmd.Output()
+	baseCommit, err := gitRevParse(dstDir, "HEAD")
 	if err != nil {
-		return nil, fmt.Errorf("Failed to get HEAD commit: %v\n", err)
+		return nil, fmt.Errorf("failed to lock base commit reference: %w", err)
 	}
 
-	baseCommit := strings.TrimSpace(string(baseCommitBytes))
 	return &Workspace{
 		Dir:        dstDir,
 		baseCommit: baseCommit,
 	}, nil
 }
 
-func (w *Workspace) Diff() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+func (w *Workspace) Diff(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
-	addCmd := exec.CommandContext(ctx, "git", "add", "-A")
-	addCmd.Dir = w.Dir
-	if err := addCmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to stage files (git add -A): %w", err)
-	}
+	return gitDiff(ctx, w.Dir, w.baseCommit)
+}
 
-	diffCmd := exec.CommandContext(ctx, "git", "diff", w.baseCommit)
-	diffCmd.Dir = w.Dir
+func gitClone(repoDir, dstDir string) error {
+	cmd := exec.Command("git", "clone", "--local", repoDir, dstDir)
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("stdout/stderr: %s (%v)", errBuf.String(), err)
+	}
+	return nil
+}
+
+func gitRevParse(dir, target string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", target)
+	cmd.Dir = dir
+
+	outBytes, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(outBytes)), nil
+}
+
+func gitDiff(ctx context.Context, dir, baseCommit string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "diff", baseCommit)
+	cmd.Dir = dir
 
 	var stdout, stderr bytes.Buffer
-	diffCmd.Stdout = &stdout
-	diffCmd.Stderr = &stderr
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	if err := diffCmd.Run(); err != nil {
-		return "", fmt.Errorf("git diff failed: %v, stderr: %s", err, stderr.String())
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git diff against %s failed: %v, stderr: %s", baseCommit, err, stderr.String())
 	}
 
 	return stdout.String(), nil

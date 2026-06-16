@@ -3,14 +3,16 @@ package stage
 import (
 	"context"
 	"encoding/json"
+	"io"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
 )
 
 type ReviewerOpts struct {
-	Image string
-	Dir   string
+	Image     string
+	Dir       string
+	LogWriter io.Writer
 	// WorkspaceDir, when set, is the target repository mounted where we can make any changes
 	WorkspaceDir string
 	AgentsDir    string
@@ -29,6 +31,7 @@ func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, exO
 		dir:        exOpts.Dir,
 		mounts:     mounts,
 		agentsPath: exOpts.AgentsDir,
+		logger:     exOpts.LogWriter,
 	}, input)
 	if err != nil {
 		return types.Review{}, err

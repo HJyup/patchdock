@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -28,6 +29,7 @@ type opts struct {
 	dir        string
 	mounts     []docker.Mount
 	agentsPath string
+	logger     io.Writer
 }
 
 func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]byte, error) {
@@ -88,7 +90,10 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 
 	// For know, just skip
 	for msg := range logs {
-		fmt.Println(msg)
+		_, err := fmt.Fprintln(op.logger, msg)
+		if err != nil {
+			return nil, fmt.Errorf(" [Logger Error] failed writing to log stream: %w\n", err)
+		}
 	}
 
 	res := <-runRes

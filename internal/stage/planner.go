@@ -3,14 +3,16 @@ package stage
 import (
 	"context"
 	"encoding/json"
+	"io"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
 )
 
 type PlannerOpts struct {
-	Image string
-	Dir   string
+	Image     string
+	Dir       string
+	LogWriter io.Writer
 	// RepoDir, when set, is the target repository mounted read-only at /repo
 	// so the planner can explore the code it plans against.
 	RepoDir   string
@@ -30,6 +32,7 @@ func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpt
 		dir:        plOpts.Dir,
 		mounts:     mounts,
 		agentsPath: plOpts.AgentsDir,
+		logger:     plOpts.LogWriter,
 	}, input)
 	if err != nil {
 		return types.Plan{}, err

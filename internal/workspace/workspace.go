@@ -34,6 +34,10 @@ func (w *Workspace) Diff(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
+	if err := gitAddAll(ctx, w.Dir); err != nil {
+		return "", fmt.Errorf("failed staging workspace changes: %w", err)
+	}
+
 	return gitDiff(ctx, w.Dir, w.baseCommit)
 }
 
@@ -72,4 +76,17 @@ func gitDiff(ctx context.Context, dir, baseCommit string) (string, error) {
 	}
 
 	return stdout.String(), nil
+}
+
+func gitAddAll(ctx context.Context, dir string) error {
+	cmd := exec.CommandContext(ctx, "git", "add", "-A")
+	cmd.Dir = dir
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git add failed: %v, stderr: %s", err, stderr.String())
+	}
+	return nil
 }

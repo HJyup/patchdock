@@ -42,7 +42,7 @@ func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exO
 		return types.ExecutionResult{}, ErrOutputNotJSON{Err: err}
 	}
 
-	ex.TaskID = input.Plan.ID
+	ex.TaskID = input.Plan.TaskID
 	ex.PlanID = input.Plan.ID
 
 	res, err := types.NewExecutionResult(ex)

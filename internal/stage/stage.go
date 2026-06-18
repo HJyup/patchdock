@@ -8,14 +8,15 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
 )
 
 const (
-	input           = "input.json"
-	output          = "output.json"
+	Input           = "input.json"
+	Output          = "output.json"
 	IOTarget        = "/io"
 	AgentsTarget    = "/agents"
 	RepoTarget      = "/repo"
@@ -65,18 +66,17 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 	mounts = append(mounts, ioMount)
 	mounts = append(mounts, agentMount)
 
-	byteSlice, err := json.Marshal(inputCnt)
+	byteSlice, err := json.MarshalIndent(inputCnt, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode input: %w", err)
 	}
 
-	inFile := filepath.Join(op.dir, input)
+	inFile := filepath.Join(op.dir, Input)
 	err = os.WriteFile(inFile, byteSlice, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write %s: %w", input, err)
+		return nil, fmt.Errorf("failed to write %s: %w", Input, err)
 	}
 
-	// logs will be then logging to a separate file
 	logs, runRes := c.Run(ctx, docker.RunSpec{
 		Image:  op.image,
 		Mounts: mounts,
@@ -88,11 +88,14 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 		Entrypoint: nil,
 	})
 
-	// For know, just skip
+	logWriter := op.logger
+	if logWriter == nil {
+		logWriter = io.Discard
+	}
+	fmt.Fprintf(logWriter, "\n%s LOGS\n", strings.ToUpper(string(op.stage)))
 	for msg := range logs {
-		_, err := fmt.Fprintln(op.logger, msg)
-		if err != nil {
-			return nil, fmt.Errorf(" [Logger Error] failed writing to log stream: %w\n", err)
+		if _, err := fmt.Fprintln(logWriter, msg.Text); err != nil {
+			return nil, fmt.Errorf("stage: failed writing to log stream: %w", err)
 		}
 	}
 
@@ -104,13 +107,13 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 		return nil, ErrContainer{ExitCode: res.ExitCode}
 	}
 
-	outFile := filepath.Join(op.dir, output)
+	outFile := filepath.Join(op.dir, Output)
 	content, err := os.ReadFile(outFile)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrOutputMissing{Path: outFile}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", output, err)
+		return nil, fmt.Errorf("failed to read %s: %w", Output, err)
 	}
 
 	return content, nil

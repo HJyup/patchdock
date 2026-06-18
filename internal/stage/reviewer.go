@@ -42,7 +42,7 @@ func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, exO
 		return types.Review{}, ErrOutputNotJSON{Err: err}
 	}
 
-	rev.TaskID = input.Plan.ID
+	rev.TaskID = input.Plan.TaskID
 	rev.ExecutionID = input.ExecutionResults[len(input.ExecutionResults)-1].ID
 
 	res, err := types.NewReview(rev)

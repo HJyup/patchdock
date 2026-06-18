@@ -91,6 +91,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	if err != nil {
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
+	archiveStage(logger, env.PlannerPath())
 
 	out.Plan = plan
 	history := newHistory()
@@ -114,12 +115,12 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 		if err != nil {
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
+		archiveStage(logger, env.ExecutorPath(attempt))
 
 		diff, err := wks.Diff(ctx)
 		if err != nil {
 			return out, fmt.Errorf("executor stage (failed computing diffs): %w", err)
 		}
-		fmt.Println(diff)
 		res.Patch = diff
 
 		history.AddExecution(res)
@@ -137,8 +138,9 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			LogWriter:    logger,
 		})
 		if err != nil {
-			return out, fmt.Errorf("reviewer reviewer: %w", err)
+			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
+		archiveStage(logger, env.ReviewPath(attempt))
 
 		history.AddReview(rev)
 		out.Review = rev
@@ -171,8 +173,14 @@ func (p *Pipeline) validateEnv(ctx context.Context) error {
 	}
 
 	if !exists {
-		return fmt.Errorf("image %q not found — build it first:\n  docker build -t %s sdk/", p.image, p.repoDir)
+		return fmt.Errorf("image %q not found — build it first:\n  docker build -t %s sdk/", p.image, p.image)
 	}
 
 	return nil
+}
+
+func archiveStage(logger *auditlog.Logger, dir string) {
+	if err := logger.ArchiveStage(dir); err != nil {
+		fmt.Fprintf(logger, "audit: failed to archive %s: %v\n", filepath.Base(dir), err)
+	}
 }

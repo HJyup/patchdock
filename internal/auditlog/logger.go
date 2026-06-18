@@ -1,10 +1,18 @@
 package auditlog
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/HJyup/patchdock/internal/stage"
 )
+
+// stagesDir groups the per-stage contract folders under the run dir
+const stagesDir = "stages"
 
 type Logger struct {
 	logDir  string
@@ -47,7 +55,7 @@ func (l *Logger) WriteOutcome(outcome []byte) error {
 	}
 
 	outputPath := filepath.Join(l.logDir, "outcome.json")
-	if err := os.WriteFile(outputPath, outcome, 0644); err != nil {
+	if err := os.WriteFile(outputPath, outcome, 0o644); err != nil {
 		return fmt.Errorf("failed to write outcome.json: %w", err)
 	}
 
@@ -56,12 +64,46 @@ func (l *Logger) WriteOutcome(outcome []byte) error {
 
 func (l *Logger) WriteDiffs(diffs []byte) error {
 	if l.logDir == "" {
-		return fmt.Errorf("cannot write outcome: log directory is not initialized")
+		return fmt.Errorf("cannot write patch: log directory is not initialized")
 	}
 
 	diffsPath := filepath.Join(l.logDir, "workspace.patch")
-	if err := os.WriteFile(diffsPath, diffs, 0644); err != nil {
-		return fmt.Errorf("failed to write outcome.json: %w", err)
+	if err := os.WriteFile(diffsPath, diffs, 0o644); err != nil {
+		return fmt.Errorf("failed to write workspace.patch: %w", err)
+	}
+
+	return nil
+}
+
+func (l *Logger) ArchiveStage(srcDir string) error {
+	if l.logDir == "" {
+		return fmt.Errorf("cannot archive stage: log directory is not initialized")
+	}
+
+	label := filepath.Base(srcDir)
+	dstDir := filepath.Join(l.logDir, stagesDir, label)
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		return fmt.Errorf("create stage log dir %s: %w", label, err)
+	}
+
+	for _, name := range []string{stage.Input, stage.Output} {
+		data, err := os.ReadFile(filepath.Join(srcDir, name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read %s/%s: %w", label, name, err)
+		}
+
+		out := data
+		var pretty bytes.Buffer
+		if json.Indent(&pretty, data, "", "  ") == nil {
+			out = pretty.Bytes()
+		}
+
+		if err := os.WriteFile(filepath.Join(dstDir, name), out, 0o644); err != nil {
+			return fmt.Errorf("archive %s/%s: %w", label, name, err)
+		}
 	}
 
 	return nil

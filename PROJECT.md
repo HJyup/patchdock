@@ -1,151 +1,150 @@
 # patchdock
 
-> A typed agent-pipeline runtime. You write the agents; patchdock runs
-> them in Docker, routes typed contracts between stages, and gives you
-> an audit trail of every run.
+> A typed, sandboxed runtime for running coding agents. You drive it from
+> Claude Code over MCP — or from the CLI — and it runs the work in isolated
+> Docker containers, routes typed contracts between stages, and hands you a
+> complete audit trail of every run.
 
-## What patchdock does
+## What patchdock is
 
-Patchdock drives a fixed pipeline against a code repository:
+Patchdock is the **engine room** behind your coding agent. Claude Code (or
+Codex, or your own agent) is the **cockpit**. Patchdock is what the cockpit *delegates to* when the work needs
+to be **isolated, parallel, unattended, or recorded**: it runs each stage of the
+work in its own Docker container, enforces typed contracts between stages, and
+hands back a structured result plus an audit trail.
 
-    task → planner → executor → checks → reviewer → patch
+It is the runtime that lets you *offload* coding work — *"run this in a sandbox, I'll keep
+working"* — and run many such tasks at once, without melting your laptop or
+touching your working tree.
 
-The user writes three TypeScript files defining what each stage does;
-patchdock provides the runtime that executes them. Each stage runs in
-its own Docker container. Contracts flow between stages as typed JSON.
-Tasks can run concurrently — many issues in flight at once, one
-container per stage per task.
+Work flows through up to three stages:
+
+    task → planner → executor → checks → reviewer → result (diff + audit)
+
+Each stage can be backed by a **real coding agent** (Claude Code / Codex running
+headless) or a **custom TypeScript agent** written against the SDK. Stages talk
+only through typed JSON contracts. Tasks run concurrently — one container per
+stage per task.
+
+## Two front doors, one engine
+
+Patchdock exposes the same building blocks at two altitudes:
+
+- **MCP server** — Claude Code connects and calls `run_task`, `run_planner`,
+  `run_executor`, `run_reviewer` as tools. Execution is **async**: a call
+  returns a `run_id` immediately and the work runs in the background, so you
+  fire off a sandboxed task and keep working. The result and an audit pointer
+  come back when it lands. This is the offload story.
+- **CLI** — `patchdock run` drives the **blessed end-to-end pipeline** for
+  unattended / batch use, with the runtime owning the loop (gated checks,
+  bounded retries).
+
+The MCP primitives and the CLI pipeline are the same stages composed two ways:
+**à la carte** when you want control, the **set-menu** pipeline when you want
+guarantees. Strict data, flexible flow.
 
 ## How a user uses it
 
-1. **`patchdock init`** in any repo. Creates a `.patchdock/` directory
-   with `config.yml`, a `Dockerfile` describing how to replicate the
-   codebase in a container, and three TypeScript files
-   (`planner.ts`, `executioner.ts`, `reviewer.ts`).
-2. **Edit the agent files.** Each one exports a default function with a
-   typed signature provided by the patchdock SDK. Prompts, models,
-   tools, and logic are user-defined.
-3. **`patchdock`** opens a terminal UI. The user picks a GitHub issue
-   (or enters a prompt) and watches the pipeline execute. Multiple
-   tasks can run in parallel.
-4. **The runtime executes:** the planner reads the task and the repo
-   (read-only) and produces a `Plan`. The executor receives the Plan,
-   modifies a sandboxed copy of the repo, and produces an
-   `ExecutionResult` with the resulting patch. Deterministic checks
-   (npm test, go vet, etc.) run against the patch. The reviewer
-   evaluates the execution against the plan and the check results, and
-   either accepts or rejects.
-5. **On accept,** patchdock applies the diff and opens a pull request
-   on GitHub. On reject, the executor runs again against the same plan
-   with the reviewer's feedback as additional input. Retries are
-   bounded by configuration.
-6. **Every run produces an audit log** at `.patchdock/logs/<run-id>/`:
-   each stage's input, output, container log, token usage, and a
-   manifest summary. Runs are fully reconstructable from disk.
+1. **`patchdock init`** in any repo. Creates a `.patchdock/` directory with a
+   `config.yml`, a `Dockerfile` describing how to replicate the codebase in a
+   container, and agent definition files.
+2. **Configure.** In `config.yml` the user sets per-container limits (wall-clock
+   timeout, token budget), the maximum number of concurrent containers, and the
+   deterministic checks to run against the executor's diff. Each stage is
+   pointed at an agent backend — a real coding agent or a custom SDK agent.
+3. **Drive it.** Either connect Claude Code to the MCP server and offload work,
+   or run the full pipeline from the CLI.
+4. **The runtime executes.** The planner reads the task and the repo
+   (read-only) and produces a `Plan`. The executor receives the Plan, modifies a
+   sandboxed git clone of the repo, and produces an `ExecutionResult` (the diff).
+   Deterministic checks run against the diff. The reviewer evaluates the result
+   against the plan and the checks, and accepts or rejects.
+5. **On reject,** the executor retries against the same plan with the reviewer's
+   structured feedback folded in. Retries are bounded by config.
+6. **Every run produces an audit log** at `.patchdock/logs/<run-id>/`: each
+   stage's typed input and output, container logs, token usage, and a manifest.
+   Runs are append-only and fully reconstructable.
 
 ## Features
 
-### Configurable agents
+### Pluggable agent backends
 
-Each stage's behavior is defined by a user-owned TypeScript file. The
-SDK exposes typed inputs and outputs (`Plan`, `ExecutionResult`,
-`ReviewFeedback`), prompt helpers, model selection, and tool wiring.
-The user controls prompts, the model used per stage, which tools are
-available, and the agent's logic.
+Each stage is backed by an agent: a real coding agent (Claude Code or Codex run
+headless inside the container) or a custom TypeScript agent written against the
+SDK. Patchdock has no opinion on how a stage thinks — it provides the typed
+input, the sandbox, and the budget, and collects the typed output.
 
 ### Typed contracts between stages
 
-Stages communicate only through three typed JSON contracts —
-`Plan`, `ExecutionResult`, `ReviewFeedback`. Every contract is
-validated on the way out of one stage and on the way into the next.
-Failures surface at the boundary with the broken field named.
+Stages communicate only through three typed JSON contracts — `Plan`,
+`ExecutionResult`, `Review`. Each is validated on the way out of one stage and
+into the next; failures surface at the boundary with the broken field named.
+These same contracts are what Claude Code reasons over when it orchestrates —
+they are the **orchestration interface**, not just data hygiene.
 
-### Concurrent task execution
+### MCP front door + async offload
 
-Multiple tasks run in parallel, each with its own Docker container per
-stage. Logs from concurrent containers are streamed live, demultiplexed
-by task. The user can launch one task or fan out across every open
-issue in a repository.
+Patchdock runs as an MCP server. Claude Code calls the stages and the pipeline as
+tools. Execution is non-blocking: a call returns a `run_id` immediately and the
+work runs in the background, so you fire a sandboxed task and keep working.
+Results come back as a structured value **+ a short summary + a pointer to the
+audit log** — never raw logs dumped into context.
 
-### Docker-isolated execution
+### Concurrent, bounded execution
 
-The planner sees the target repository read-only. The executor works in
-a sandboxed overlay of the repository — modifications cannot escape
-the workspace. The orchestrator extracts a clean diff after the
-executor exits. Each container has configurable memory, CPU, and
-wall-clock limits.
+Many tasks run in parallel, each with its own container per stage, capped by a
+configured max-concurrency. Logs from concurrent containers are streamed live
+and demultiplexed by task. Run one task, or fan out — best-of-N attempts at one
+problem, or a whole batch overnight.
+
+### Docker-isolated execution with hard budgets
+
+The planner sees the repo read-only; the executor works in a sandboxed git clone
+it cannot escape; patchdock extracts a clean diff after it exits. Every container
+has a configured **wall-clock timeout** and **token budget**, so a run can't burn
+your night or your wallet.
 
 ### Deterministic checks
 
-Between executor and reviewer, user-configured commands (test suites,
-linters, type checkers) run inside a container against the executor's
-diff. Failures are surfaced to the reviewer as blocking issues.
+Between executor and reviewer, user-configured commands (tests, linters, type
+checkers) run in a container against the diff. Failures are surfaced to the
+reviewer as blocking issues.
 
 ### Reviewer with structured feedback
 
-The reviewer produces a typed decision (`accept` or `reject`) and, on
-reject, a list of structured `Issues` — each with severity, location
-(file and line range), and a suggested fix. The executor retries
-against the same plan with the issues folded into its input. The loop
-is bounded by configured retry limits.
+The reviewer produces a typed `accept`/`reject` and, on reject, a list of
+structured `Issues` — each with severity, location, and a suggested fix. The
+executor retries against the same plan with the issues folded into its input.
+Bounded by config.
 
 ### Per-run audit log
 
-Every run writes a complete record to `.patchdock/logs/<run-id>/`:
-manifest summary, per-attempt input and output JSON, container logs,
-token usage per stage, and the final patch. Runs are append-only and
-never mutated — six months later the chain of decisions is fully
-reconstructable.
-
-### Terminal UI
-
-A Bubble Tea–based terminal interface presents an issue picker or
-prompt entry, a multi-pane view of concurrent tasks, live log tails,
-plan and diff inspection, and accept/reject gates.
-
-### GitHub integration
-
-Issues fetched from GitHub serve as task input. Accepted runs open a
-pull request against the repository. Authentication via a personal
-access token.
+Every run writes a complete, append-only record to `.patchdock/logs/<run-id>/`:
+manifest summary, per-attempt typed input and output, container logs, token
+usage, and the final patch. The audit log is the **source of truth**; the result
+Claude Code sees is a structured projection of it.
 
 ## Architecture
-
-Data flows left to right; everything depends on `contracts`, nothing
-depends on `tui`:
-
-    cmd/patchdock ──► tui ──► pipeline (orchestrator)
-                                  │
-            ┌──────────┬──────────┼──────────┬─────────┐
-            ▼          ▼          ▼          ▼         ▼
-        workspace   agentio    checks    auditlog   github
-            │          │          │
-            └──────────┴── docker ┘
-                           │
-                      contracts  (shared by all)
-
 | Package | Responsibility |
 |---|---|
-| `cmd/patchdock` | CLI entry, subcommands, dependency wiring |
-| `internal/contracts` | the three typed contracts + validation |
+| `cmd/patchdock` | CLI entry, subcommands, MCP server launch, dependency wiring |
+| `internal/mcp` | MCP server: `run_task` / `run_planner` / `run_executor` / `run_reviewer`, async run store, handles |
+| `internal/types` | the three typed contracts + validation |
+| `internal/config` | load + validate `.patchdock/config.yml` (limits, concurrency, checks, agent backends) |
 | `internal/docker` | image build, container run, mounts, limits, log streaming |
-| `internal/config` | load + validate `.patchdock/config.yml` |
-| `internal/workspace` | per-task repo copies, mounts, diff extraction |
-| `internal/agentio` | file-based contract exchange with agent containers |
-| `internal/pipeline` | the orchestrator: stage order, retry loop, token caps |
-| `internal/checks` | run deterministic checks, produce a `CheckReport` |
+| `internal/workspace` | per-task git-clone sandbox, mounts, diff extraction |
+| `internal/stage` | run a single stage in a container, typed file-based IO exchange |
+| `internal/checks` | run deterministic checks against the diff, produce a `CheckReport` |
+| `internal/pipeline` | the blessed composition: stage order, retry loop, budgets |
+| `internal/scheduler` | bounded-concurrency orchestration of many runs |
 | `internal/auditlog` | append-only `.patchdock/logs/<run-id>/` record |
-| `internal/github` | issues in, pull requests out |
-| `internal/scaffold` | `patchdock init` templates (`go:embed`) |
-| `internal/tui` | Bubble Tea UI, pure consumer of pipeline events |
-| `sdk/` | TypeScript SDK + agent runtime + base Docker image |
+| `sdk/` | TypeScript SDK + agent runtime + base image; agent backends (custom + Claude Code / Codex adapters) |
 
 ## Mental model
 
-Patchdock is a **pipeline runtime**, not an autonomous coding agent.
-The runtime has no opinion on how the planner thinks, what model the
-executor uses, or what the reviewer optimizes for. Those are the user's
-decisions, expressed in the user's TypeScript files. Patchdock's job
-is to route typed values between isolated processes safely,
-concurrently, and reproducibly — and to give the user a complete
-record of what happened.
+Patchdock is a **runtime, not an agent**. Claude Code is the cockpit; patchdock
+is the engine room. The runtime has no opinion on how the planner thinks or what
+model the executor uses — those are the user's decisions, expressed in config and
+agent files. Patchdock's job is to route typed values between isolated containers
+safely, concurrently, and reproducibly, and to hand the orchestrator — you, or
+Claude Code — a complete record of what happened.

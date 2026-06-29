@@ -6,14 +6,11 @@ import (
 
 // Task is an issue/prompt which passed as a first context to the planner
 type Task struct {
-	ID string `json:"id" validate:"required"`
-	// Taken from the GitHub
+	ID    string `json:"id" validate:"required"`
 	Title string `json:"title,omitempty"`
-	// Full description of the task we can try to achieve:
-	// either GitHub issue description, or just prompt from the user
-	Description string `json:"description" validate:"required"`
-	// Taken from the GitHub
-	Labels []string `json:"labels,omitempty"`
+	// Description is the full task: either a GitHub issue body or a user prompt.
+	Description string   `json:"description" validate:"required"`
+	Labels      []string `json:"labels,omitempty"`
 }
 
 func (t *Task) validate() error { return validateStruct(t, "task") }

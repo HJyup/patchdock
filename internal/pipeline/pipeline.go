@@ -62,7 +62,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 	defer logger.Close()
 
-	// Outcome which will be populated after each stage
 	out := &Outcome{
 		TaskID:   task.ID,
 		Accepted: false,

@@ -44,9 +44,9 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 		ReadOnly: false,
 	}
 
-	// Mounts agents ts files from the .patchdock.
-	// Yeah, we have .patchdock already from ./repo mount but what if we wanna define a new stage where
-	// repo is not used? So it's better not to try to parse them from there.
+	// Mount the agent definitions explicitly rather than reading them out of
+	// the /repo mount: a stage may run without a repo, so agents can't depend
+	// on it being present.
 	agentMount := docker.Mount{
 		Source:   op.agentsPath,
 		Target:   AgentsTarget,

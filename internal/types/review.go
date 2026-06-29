@@ -1,6 +1,6 @@
 package types
 
-import "github.com/HJyup/patchdock/internal/utils"
+import "github.com/HJyup/patchdock/internal/id"
 
 // Review is the reviewer stage's output for one ExecutionResult.
 //
@@ -65,7 +65,7 @@ const (
 
 func NewReview(r Review) (Review, error) {
 	if r.ID == "" {
-		r.ID = utils.NewID("review")
+		r.ID = id.New("review")
 	}
 	if err := r.validate(); err != nil {
 		return Review{}, err

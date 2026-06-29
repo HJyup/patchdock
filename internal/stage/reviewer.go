@@ -3,6 +3,7 @@ package stage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 
 	"github.com/HJyup/patchdock/internal/docker"
@@ -19,6 +20,10 @@ type ReviewerOpts struct {
 }
 
 func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, exOpts ReviewerOpts) (types.Review, error) {
+	if len(input.ExecutionResults) == 0 {
+		return types.Review{}, fmt.Errorf("reviewer requires at least one execution result")
+	}
+
 	var mounts []docker.Mount
 	if exOpts.WorkspaceDir != "" {
 		mounts = append(mounts, docker.Mount{Source: exOpts.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: true})

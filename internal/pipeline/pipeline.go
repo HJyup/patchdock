@@ -31,8 +31,8 @@ type Outcome struct {
 	Accepted  bool
 }
 
-func NewPipeline(cli *docker.Client, image, repoDir, agentsDir string, maxRetries int) Pipeline {
-	return Pipeline{
+func NewPipeline(cli *docker.Client, image, repoDir, agentsDir string, maxRetries int) *Pipeline {
+	return &Pipeline{
 		cli:        cli,
 		image:      image,
 		repoDir:    repoDir,

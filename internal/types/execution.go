@@ -1,6 +1,6 @@
 package types
 
-import "github.com/HJyup/patchdock/internal/utils"
+import "github.com/HJyup/patchdock/internal/id"
 
 // ExecutionResult is the executor stage's output for one Plan attempt.
 //
@@ -60,7 +60,7 @@ type ExecutionError struct {
 // validates it. A zero ID is generated; a set ID is kept for determinism.
 func NewExecutionResult(e ExecutionResult) (ExecutionResult, error) {
 	if e.ID == "" {
-		e.ID = utils.NewID("exec")
+		e.ID = id.New("exec")
 	}
 	if err := e.validate(); err != nil {
 		return ExecutionResult{}, err

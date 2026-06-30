@@ -8,10 +8,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/HJyup/patchdock/internal/types"
 	"github.com/go-playground/validator/v10"
 )
 
-var requiredStages = []string{"planner", "executor", "reviewer"}
+var requiredStages = []types.StageName{types.StageReviewer, types.StageExecutor, types.StageReviewer}
 
 var configValidator = newConfigValidator()
 
@@ -83,7 +84,7 @@ func validateStages(sl validator.StructLevel) {
 	c := sl.Current().Interface().(Config)
 	for _, stage := range requiredStages {
 		if _, ok := c.Stages[stage]; !ok {
-			sl.ReportError(c.Stages, "stages."+stage, "Stages", "stage_missing", "")
+			sl.ReportError(c.Stages, "stages."+string(stage), "Stages", "stage_missing", "")
 		}
 	}
 }

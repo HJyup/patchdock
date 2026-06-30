@@ -14,9 +14,29 @@ type Duration time.Duration
 // UnmarshalYAML parses a Go duration string (time.ParseDuration) into Duration
 // Signature of yaml.Unmarshaler, and yaml.v3 only calls the method if it matches
 func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.ScalarNode {
+		return fmt.Errorf("duration must be a string like \"10m\" or 0")
+	}
+
+	if value.Tag == "!!int" {
+		var n int64
+		if err := value.Decode(&n); err != nil {
+			return fmt.Errorf("duration must be a string like \"10m\" or 0: %w", err)
+		}
+		if n != 0 {
+			return fmt.Errorf("numeric duration must be 0 for unlimited; use a string like \"10m\" for bounded timeouts")
+		}
+		*d = 0
+		return nil
+	}
+
 	var s string
 	if err := value.Decode(&s); err != nil {
-		return fmt.Errorf("duration must be a string like \"10m\": %w", err)
+		return fmt.Errorf("duration must be a string like \"10m\" or 0: %w", err)
+	}
+	if s == "0" {
+		*d = 0
+		return nil
 	}
 
 	parsed, err := time.ParseDuration(s)

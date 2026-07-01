@@ -1,0 +1,18 @@
+import { definePlanner } from "@patchdock/sdk";
+
+export default definePlanner({
+  async run(ctx, input) {
+    ctx.log(`Planning task: ${input.task.description}`);
+
+    return {
+      approach: "Create a small, focused change that satisfies the task.",
+      acceptance_criteria: ["The requested behavior is implemented and easy to review."],
+      steps: [
+        {
+          id: "step-1",
+          description: input.task.description,
+        },
+      ],
+    };
+  },
+});

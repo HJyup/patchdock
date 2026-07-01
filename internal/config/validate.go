@@ -12,7 +12,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-var requiredStages = []types.StageName{types.StageReviewer, types.StageExecutor, types.StageReviewer}
+var requiredStages = []types.StageName{types.StagePlanner, types.StageExecutor, types.StageReviewer}
 
 var configValidator = newConfigValidator()
 

@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -37,6 +38,7 @@ type RunSpec struct {
 	Env        map[string]string // joined to KEY=VALUE by Run
 	Labels     map[string]string // e.g. patchdock.task-id
 	Entrypoint []string          // nil = image default; set to override (check mode)
+	Timeout    time.Duration     // wall-clock ceiling for the run; 0 = unlimited. Not enforced yet.
 }
 
 // LogLine is one demuxed output line from a build or run.

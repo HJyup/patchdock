@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
@@ -17,6 +18,10 @@ type PlannerOpts struct {
 	// so the planner can explore the code it plans against.
 	RepoDir   string
 	AgentsDir string
+
+	Timeout   time.Duration
+	MaxTokens int
+	AgentFile string
 }
 
 func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpts PlannerOpts) (types.Plan, error) {
@@ -33,6 +38,9 @@ func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpt
 		mounts:     mounts,
 		agentsPath: plOpts.AgentsDir,
 		logger:     plOpts.LogWriter,
+		agentFile:  plOpts.AgentFile,
+		timeout:    plOpts.Timeout,
+		maxTokens:  plOpts.MaxTokens,
 	}, input)
 	if err != nil {
 		return types.Plan{}, err

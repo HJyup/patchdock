@@ -2,7 +2,7 @@ import { defineReviewer } from "@patchdock/sdk";
 
 export default defineReviewer({
   async run(ctx, input) {
-    const latest = input.execution_results.at(-1);
+    const latest = input.execution_results[input.execution_results.length - 1];
     ctx.log(`Reviewing ${input.execution_results.length} execution result(s).`);
 
     if (latest?.status === "failed") {

@@ -20,7 +20,7 @@ var initCmd = &cobra.Command{
 		--force to overwrite the existing files.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		repoDir, err := resolveInitRepoDir(args)
+		repoDir, err := resolveDir(args)
 		if err != nil {
 			return err
 		}
@@ -40,7 +40,7 @@ func init() {
 	initCmd.Flags().BoolVar(&initForce, "force", false, "overwrite an existing .patchdock/ directory")
 }
 
-func resolveInitRepoDir(args []string) (string, error) {
+func resolveDir(args []string) (string, error) {
 	repoDir := "."
 	if len(args) > 0 {
 		repoDir = args[0]

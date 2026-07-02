@@ -8,7 +8,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
@@ -31,6 +33,9 @@ type opts struct {
 	mounts     []docker.Mount
 	agentsPath string
 	logger     io.Writer
+	agentFile  string
+	timeout    time.Duration
+	maxTokens  int
 }
 
 func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]byte, error) {
@@ -77,15 +82,24 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 		return nil, fmt.Errorf("failed to write %s: %w", Input, err)
 	}
 
+	env := map[string]string{
+		"PATCHDOCK_STAGE":   string(op.stage),
+		"PATCHDOCK_TASK_ID": op.taskID,
+	}
+	if op.agentFile != "" {
+		env["PATCHDOCK_AGENT_FILE"] = op.agentFile
+	}
+	if op.maxTokens > 0 {
+		env["PATCHDOCK_TOKEN_BUDGET"] = strconv.Itoa(op.maxTokens)
+	}
+
 	logs, runRes := c.Run(ctx, docker.RunSpec{
-		Image:  op.image,
-		Mounts: mounts,
-		Env: map[string]string{
-			"PATCHDOCK_STAGE":   string(op.stage),
-			"PATCHDOCK_TASK_ID": op.taskID,
-		},
+		Image:      op.image,
+		Mounts:     mounts,
+		Env:        env,
 		Labels:     map[string]string{"patchdock.task-id": op.taskID},
 		Entrypoint: nil,
+		Timeout:    op.timeout,
 	})
 
 	logWriter := op.logger

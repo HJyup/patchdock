@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/HJyup/patchdock/internal/config"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/pipeline"
 	"github.com/HJyup/patchdock/internal/types"
@@ -55,6 +56,11 @@ func runTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("agents dir not found at %s: %w", agentsAbs, err)
 	}
 
+	cfg, err := config.Load(filepath.Join(agentsAbs, "config.yml"))
+	if err != nil {
+		return err
+	}
+
 	cli, err := docker.NewClient()
 	if err != nil {
 		return err
@@ -66,7 +72,7 @@ func runTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("invalid task: %w", err)
 	}
 
-	p := pipeline.NewPipeline(cli, defaultAgentImage, repoAbs, agentsAbs, 0)
+	p := pipeline.NewPipeline(cli, cfg, defaultAgentImage, repoAbs, agentsAbs)
 	outcome, err := p.Run(ctx, task)
 	if err != nil {
 		return fmt.Errorf("pipeline: %w", err)

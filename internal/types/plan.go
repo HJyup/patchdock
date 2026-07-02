@@ -41,7 +41,7 @@ type Step struct {
 	// Rationale is why this step is necessary.
 	// Optional: a step whose description carries its own justification may
 	// leave it empty.
-	Rationale string `json:"rationale"`
+	Rationale string `json:"rationale,omitempty"`
 
 	// FilesToModify is the planner's intent.
 	// Executor may modify additional files

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
@@ -17,6 +18,10 @@ type ReviewerOpts struct {
 	// WorkspaceDir, when set, is the target repository mounted where we can make any changes
 	WorkspaceDir string
 	AgentsDir    string
+
+	Timeout   time.Duration
+	MaxTokens int
+	AgentFile string
 }
 
 func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, exOpts ReviewerOpts) (types.Review, error) {
@@ -37,6 +42,9 @@ func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, exO
 		mounts:     mounts,
 		agentsPath: exOpts.AgentsDir,
 		logger:     exOpts.LogWriter,
+		agentFile:  exOpts.AgentFile,
+		timeout:    exOpts.Timeout,
+		maxTokens:  exOpts.MaxTokens,
 	}, input)
 	if err != nil {
 		return types.Review{}, err

@@ -8,7 +8,7 @@ type PlannerInput struct {
 
 type ExecutorInput struct {
 	Plan    types.Plan     `json:"plan"`
-	Reviews []types.Review `json:"review"`
+	Reviews []types.Review `json:"reviews"`
 }
 
 type ReviewerInput struct {

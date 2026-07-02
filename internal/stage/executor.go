@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
@@ -16,6 +17,10 @@ type ExecutorOpts struct {
 	// WorkspaceDir, when set, is the target repository mounted where we can make any changes
 	WorkspaceDir string
 	AgentsDir    string
+
+	Timeout   time.Duration
+	MaxTokens int
+	AgentFile string
 }
 
 func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exOpts ExecutorOpts) (types.ExecutionResult, error) {
@@ -32,6 +37,9 @@ func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exO
 		mounts:     mounts,
 		agentsPath: exOpts.AgentsDir,
 		logger:     exOpts.LogWriter,
+		agentFile:  exOpts.AgentFile,
+		timeout:    exOpts.Timeout,
+		maxTokens:  exOpts.MaxTokens,
 	}, input)
 	if err != nil {
 		return types.ExecutionResult{}, err

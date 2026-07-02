@@ -83,7 +83,7 @@ export const plannerInputSchema = z.object({
 
 export const executorInputSchema = z.object({
   plan: planSchema,
-  review: z.array(reviewSchema),
+  reviews: z.array(reviewSchema),
 });
 
 export const reviewerInputSchema = z.object({

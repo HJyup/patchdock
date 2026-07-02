@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/HJyup/patchdock/internal/auditlog"
+	"github.com/HJyup/patchdock/internal/config"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/stage"
 	"github.com/HJyup/patchdock/internal/types"
@@ -16,6 +17,7 @@ import (
 
 type Pipeline struct {
 	cli        *docker.Client
+	cfg        config.Config
 	image      string
 	repoDir    string
 	agentsDir  string
@@ -31,13 +33,14 @@ type Outcome struct {
 	Accepted  bool
 }
 
-func NewPipeline(cli *docker.Client, image, repoDir, agentsDir string, maxRetries int) *Pipeline {
+func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDir string) *Pipeline {
 	return &Pipeline{
 		cli:        cli,
+		cfg:        cfg,
 		image:      image,
 		repoDir:    repoDir,
 		agentsDir:  agentsDir,
-		maxRetries: maxRetries,
+		maxRetries: cfg.Retries.Max,
 	}
 }
 
@@ -86,6 +89,9 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 		RepoDir:   p.repoDir,
 		AgentsDir: p.agentsDir,
 		LogWriter: logger,
+		Timeout:   p.cfg.Container.Timeout.Duration(),
+		MaxTokens: p.cfg.Container.TokenBudget,
+		AgentFile: p.cfg.Stages[types.StagePlanner],
 	})
 	if err != nil {
 		return out, fmt.Errorf("planner stage: %w", err)
@@ -110,6 +116,9 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			WorkspaceDir: wks.Dir,
 			AgentsDir:    p.agentsDir,
 			LogWriter:    logger,
+			Timeout:      p.cfg.Container.Timeout.Duration(),
+			MaxTokens:    p.cfg.Container.TokenBudget,
+			AgentFile:    p.cfg.Stages[types.StageExecutor],
 		})
 		if err != nil {
 			return out, fmt.Errorf("executor stage: %w", err)
@@ -135,6 +144,9 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			WorkspaceDir: wks.Dir,
 			AgentsDir:    p.agentsDir,
 			LogWriter:    logger,
+			Timeout:      p.cfg.Container.Timeout.Duration(),
+			MaxTokens:    p.cfg.Container.TokenBudget,
+			AgentFile:    p.cfg.Stages[types.StageReviewer],
 		})
 		if err != nil {
 			return out, fmt.Errorf("reviewer stage: %w", err)

@@ -15,9 +15,12 @@ async function main() {
 
   const raw: unknown = JSON.parse(await readFile(`${IO_PATH}/${INPUT_FILE}`, "utf8"));
 
-  const mod: unknown = await import(`/agents/${stage}.ts`);
+  // The host names the agent file via config (stages: planner: planner.ts);
+  // fall back to the conventional name when it doesn't.
+  const agentFile = process.env.PATCHDOCK_AGENT_FILE ?? `${stage}.ts`;
+  const mod: unknown = await import(`/agents/${agentFile}`);
   if (typeof mod !== "object" || mod === null || !("default" in mod)) {
-    throw new Error(`Agent module for stage "${stage}" has no default export`);
+    throw new Error(`Agent module "${agentFile}" for stage "${stage}" has no default export`);
   }
 
   const agents = definitionSchema.parse(mod.default);

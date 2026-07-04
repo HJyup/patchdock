@@ -5,8 +5,8 @@ import {
   planDataSchema,
   executionResultDataSchema,
   reviewDataSchema,
-} from "../../src/types.ts";
-import type { Stage } from "../../src/context.ts";
+} from "../types.ts";
+import type { Stage } from "../context.ts";
 import { z } from "zod";
 
 // Constants inside the IO mount

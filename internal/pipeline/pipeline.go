@@ -84,14 +84,16 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}()
 
 	plan, err := stage.RunPlanner(ctx, p.cli, stage.PlannerInput{Task: task}, stage.PlannerOpts{
-		Image:     p.image,
-		Dir:       env.PlannerPath(),
-		RepoDir:   p.repoDir,
-		AgentsDir: p.agentsDir,
-		LogWriter: logger,
-		Timeout:   p.cfg.Container.Timeout.Duration(),
-		MaxTokens: p.cfg.Container.TokenBudget,
-		AgentFile: p.cfg.Stages[types.StagePlanner],
+		Image:       p.image,
+		Dir:         env.PlannerPath(),
+		RepoDir:     p.repoDir,
+		AgentsDir:   p.agentsDir,
+		LogWriter:   logger,
+		Timeout:     p.cfg.Container.Timeout.Duration(),
+		MaxTokens:   p.cfg.Container.TokenBudget,
+		AgentFile:   p.cfg.Stages[types.StagePlanner],
+		Attempt:     1,
+		MaxAttempts: 1,
 	})
 	if err != nil {
 		return out, fmt.Errorf("planner stage: %w", err)
@@ -119,6 +121,8 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			Timeout:      p.cfg.Container.Timeout.Duration(),
 			MaxTokens:    p.cfg.Container.TokenBudget,
 			AgentFile:    p.cfg.Stages[types.StageExecutor],
+			Attempt:      attempt + 1,
+			MaxAttempts:  p.maxRetries + 1,
 		})
 		if err != nil {
 			return out, fmt.Errorf("executor stage: %w", err)
@@ -147,6 +151,8 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			Timeout:      p.cfg.Container.Timeout.Duration(),
 			MaxTokens:    p.cfg.Container.TokenBudget,
 			AgentFile:    p.cfg.Stages[types.StageReviewer],
+			Attempt:      attempt + 1,
+			MaxAttempts:  p.maxRetries + 1,
 		})
 		if err != nil {
 			return out, fmt.Errorf("reviewer stage: %w", err)

@@ -1,4 +1,4 @@
-import type { Stage, StageContext } from "../context.ts";
+import type { StageContext } from "../context.ts";
 import type { PlanData, PlannerInput } from "../types.ts";
 import { z } from "zod";
 
@@ -14,7 +14,7 @@ interface PlannerConfig {
 }
 
 interface Planner extends PlannerConfig {
-  stage: Stage;
+  stage: "planner";
 }
 
 export function definePlanner(config: PlannerConfig): Planner {

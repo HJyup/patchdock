@@ -19,9 +19,11 @@ type PlannerOpts struct {
 	RepoDir   string
 	AgentsDir string
 
-	Timeout   time.Duration
-	MaxTokens int
-	AgentFile string
+	Timeout     time.Duration
+	MaxTokens   int
+	AgentFile   string
+	Attempt     int
+	MaxAttempts int
 }
 
 func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpts PlannerOpts) (types.Plan, error) {
@@ -31,16 +33,18 @@ func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpt
 	}
 
 	raw, err := runStage(ctx, c, opts{
-		image:      plOpts.Image,
-		stage:      types.StagePlanner,
-		taskID:     input.Task.ID,
-		dir:        plOpts.Dir,
-		mounts:     mounts,
-		agentsPath: plOpts.AgentsDir,
-		logger:     plOpts.LogWriter,
-		agentFile:  plOpts.AgentFile,
-		timeout:    plOpts.Timeout,
-		maxTokens:  plOpts.MaxTokens,
+		image:       plOpts.Image,
+		stage:       types.StagePlanner,
+		taskID:      input.Task.ID,
+		dir:         plOpts.Dir,
+		mounts:      mounts,
+		agentsPath:  plOpts.AgentsDir,
+		logger:      plOpts.LogWriter,
+		agentFile:   plOpts.AgentFile,
+		timeout:     plOpts.Timeout,
+		maxTokens:   plOpts.MaxTokens,
+		attempt:     plOpts.Attempt,
+		maxAttempts: plOpts.MaxAttempts,
 	}, input)
 	if err != nil {
 		return types.Plan{}, err

@@ -18,9 +18,11 @@ type ExecutorOpts struct {
 	WorkspaceDir string
 	AgentsDir    string
 
-	Timeout   time.Duration
-	MaxTokens int
-	AgentFile string
+	Timeout     time.Duration
+	MaxTokens   int
+	AgentFile   string
+	Attempt     int
+	MaxAttempts int
 }
 
 func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exOpts ExecutorOpts) (types.ExecutionResult, error) {
@@ -30,16 +32,18 @@ func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exO
 	}
 
 	raw, err := runStage(ctx, c, opts{
-		image:      exOpts.Image,
-		stage:      types.StageExecutor,
-		taskID:     input.Plan.TaskID,
-		dir:        exOpts.Dir,
-		mounts:     mounts,
-		agentsPath: exOpts.AgentsDir,
-		logger:     exOpts.LogWriter,
-		agentFile:  exOpts.AgentFile,
-		timeout:    exOpts.Timeout,
-		maxTokens:  exOpts.MaxTokens,
+		image:       exOpts.Image,
+		stage:       types.StageExecutor,
+		taskID:      input.Plan.TaskID,
+		dir:         exOpts.Dir,
+		mounts:      mounts,
+		agentsPath:  exOpts.AgentsDir,
+		logger:      exOpts.LogWriter,
+		agentFile:   exOpts.AgentFile,
+		timeout:     exOpts.Timeout,
+		maxTokens:   exOpts.MaxTokens,
+		attempt:     exOpts.Attempt,
+		maxAttempts: exOpts.MaxAttempts,
 	}, input)
 	if err != nil {
 		return types.ExecutionResult{}, err

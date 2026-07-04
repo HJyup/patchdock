@@ -1,7 +1,12 @@
-import { StageSchema, type StageContext } from "../src/context.ts";
+import {
+  StageSchema,
+  type StageContext,
+  parseTokenBudget,
+  parseAttempt,
+} from "../src/context.ts";
 import { readFile, writeFile } from "node:fs/promises";
-import { INPUT_FILE, IO_PATH, OUTPUT_FILE } from "./mounts/io.ts";
-import { REPO_PATH, WORKSPACE_PATH } from "./mounts/code.ts";
+import { INPUT_FILE, IO_PATH, OUTPUT_FILE } from "../src/mounts/io.ts";
+import { REPO_PATH, WORKSPACE_PATH } from "../src/mounts/code.ts";
 import { definitionSchema, runAgent } from "../src/agents/index.ts";
 
 async function main() {
@@ -20,7 +25,9 @@ async function main() {
   const agentFile = process.env.PATCHDOCK_AGENT_FILE ?? `${stage}.ts`;
   const mod: unknown = await import(`/agents/${agentFile}`);
   if (typeof mod !== "object" || mod === null || !("default" in mod)) {
-    throw new Error(`Agent module "${agentFile}" for stage "${stage}" has no default export`);
+    throw new Error(
+      `Agent module "${agentFile}" for stage "${stage}" has no default export`,
+    );
   }
 
   const agents = definitionSchema.parse(mod.default);
@@ -36,6 +43,9 @@ async function main() {
     // IO is never passed since it's defined by default to agents
     paths: { repo: REPO_PATH, workspace: WORKSPACE_PATH },
     log: (msg: string) => process.stderr.write(`[${stage}] ${msg}\n`),
+    tokenBudget: parseTokenBudget(process.env.PATCHDOCK_TOKEN_BUDGET),
+    attempt: parseAttempt(process.env.PATCHDOCK_ATTEMPT),
+    maxAttempts: parseAttempt(process.env.PATCHDOCK_MAX_ATTEMPTS),
   };
 
   const output = await runAgent(agents, ctx, raw);

@@ -1,4 +1,4 @@
-import type { Stage, StageContext } from "../context.ts";
+import type { StageContext } from "../context.ts";
 import type { ReviewData, ReviewerInput } from "../types.ts";
 import { z } from "zod";
 
@@ -14,7 +14,7 @@ interface ReviewerConfig {
 }
 
 interface Reviewer extends ReviewerConfig {
-  stage: Stage;
+  stage: "reviewer";
 }
 
 export function defineReviewer(config: ReviewerConfig): Reviewer {

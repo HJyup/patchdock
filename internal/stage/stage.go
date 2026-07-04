@@ -26,16 +26,18 @@ const (
 )
 
 type opts struct {
-	image      string
-	stage      types.StageName
-	taskID     string
-	dir        string
-	mounts     []docker.Mount
-	agentsPath string
-	logger     io.Writer
-	agentFile  string
-	timeout    time.Duration
-	maxTokens  int
+	image       string
+	stage       types.StageName
+	taskID      string
+	dir         string
+	mounts      []docker.Mount
+	agentsPath  string
+	logger      io.Writer
+	agentFile   string
+	timeout     time.Duration
+	maxTokens   int
+	attempt     int
+	maxAttempts int
 }
 
 func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]byte, error) {
@@ -91,6 +93,12 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 	}
 	if op.maxTokens > 0 {
 		env["PATCHDOCK_TOKEN_BUDGET"] = strconv.Itoa(op.maxTokens)
+	}
+	if op.attempt > 0 {
+		env["PATCHDOCK_ATTEMPT"] = strconv.Itoa(op.attempt)
+	}
+	if op.maxAttempts > 0 {
+		env["PATCHDOCK_MAX_ATTEMPTS"] = strconv.Itoa(op.maxAttempts)
 	}
 
 	logs, runRes := c.Run(ctx, docker.RunSpec{

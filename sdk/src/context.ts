@@ -12,12 +12,25 @@ interface MountPaths {
   workspace?: string;
 }
 
+type Nullable<T> = T | null;
+
 interface StageContextData {
   stage: Stage;
   taskId: string;
   paths: MountPaths;
+  tokenBudget: Nullable<number>;
+  attempt: number;
+  maxAttempts: number;
 }
 
 export interface StageContext extends StageContextData {
   log: (msg: string) => void;
+}
+
+export function parseTokenBudget(budget: string | undefined): Nullable<number> {
+  return z.coerce.number().int().positive().nullable().catch(null).parse(budget);
+}
+
+export function parseAttempt(value: string | undefined): number {
+  return z.coerce.number().int().positive().catch(1).parse(value);
 }

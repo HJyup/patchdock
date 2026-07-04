@@ -1,4 +1,4 @@
-import type { Stage, StageContext } from "../context.ts";
+import type { StageContext } from "../context.ts";
 import type { ExecutionResultData, ExecutorInput } from "../types.ts";
 import { z } from "zod";
 
@@ -14,7 +14,7 @@ interface ExecutorConfig {
 }
 
 interface Executor extends ExecutorConfig {
-  stage: Stage;
+  stage: "executor";
 }
 
 export function defineExecutor(config: ExecutorConfig): Executor {

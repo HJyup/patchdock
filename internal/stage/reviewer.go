@@ -19,9 +19,11 @@ type ReviewerOpts struct {
 	WorkspaceDir string
 	AgentsDir    string
 
-	Timeout   time.Duration
-	MaxTokens int
-	AgentFile string
+	Timeout     time.Duration
+	MaxTokens   int
+	AgentFile   string
+	Attempt     int
+	MaxAttempts int
 }
 
 func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, exOpts ReviewerOpts) (types.Review, error) {
@@ -35,16 +37,18 @@ func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, exO
 	}
 
 	raw, err := runStage(ctx, c, opts{
-		image:      exOpts.Image,
-		stage:      types.StageReviewer,
-		taskID:     input.Plan.TaskID,
-		dir:        exOpts.Dir,
-		mounts:     mounts,
-		agentsPath: exOpts.AgentsDir,
-		logger:     exOpts.LogWriter,
-		agentFile:  exOpts.AgentFile,
-		timeout:    exOpts.Timeout,
-		maxTokens:  exOpts.MaxTokens,
+		image:       exOpts.Image,
+		stage:       types.StageReviewer,
+		taskID:      input.Plan.TaskID,
+		dir:         exOpts.Dir,
+		mounts:      mounts,
+		agentsPath:  exOpts.AgentsDir,
+		logger:      exOpts.LogWriter,
+		agentFile:   exOpts.AgentFile,
+		timeout:     exOpts.Timeout,
+		maxTokens:   exOpts.MaxTokens,
+		attempt:     exOpts.Attempt,
+		maxAttempts: exOpts.MaxAttempts,
 	}, input)
 	if err != nil {
 		return types.Review{}, err

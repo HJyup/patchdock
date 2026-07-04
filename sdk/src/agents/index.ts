@@ -4,7 +4,7 @@ import { executorDefinitionSchema } from "./executor.ts";
 import { reviewerDefinitionSchema } from "./reviewer.ts";
 import type { StageContext } from "../context.ts";
 import type { ExecutionResultData, PlanData, ReviewData } from "../types.ts";
-import { SPECS } from "../../runtime/mounts/io.ts";
+import { SPECS } from "../mounts/io.ts";
 
 export const definitionSchema = z.discriminatedUnion("stage", [
   plannerDefinitionSchema,

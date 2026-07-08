@@ -48,28 +48,28 @@ func Init(opts Options) error {
 		return fmt.Errorf("repo dir %s is not a directory", repoDir)
 	}
 
-	patchdockFolder := filepath.Join(repoDir, ".patchdock")
-	if stats, err := os.Stat(patchdockFolder); err == nil {
+	phdDir := filepath.Join(repoDir, ".patchdock")
+	if stats, err := os.Stat(phdDir); err == nil {
 		if !stats.IsDir() {
-			return fmt.Errorf("%s exists and is not a directory", patchdockFolder)
+			return fmt.Errorf("%s exists and is not a directory", phdDir)
 		}
 		if opts.Force {
-			if err := os.RemoveAll(patchdockFolder); err != nil {
-				return fmt.Errorf("overwrite %s: %w", patchdockFolder, err)
+			if err := os.RemoveAll(phdDir); err != nil {
+				return fmt.Errorf("overwrite %s: %w", phdDir, err)
 			}
 		} else {
-			return fmt.Errorf("%s: %w", patchdockFolder, ErrAlreadyExists)
+			return fmt.Errorf("%s: %w", phdDir, ErrAlreadyExists)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("stat %s: %w", patchdockFolder, err)
+		return fmt.Errorf("stat %s: %w", phdDir, err)
 	}
 
-	if err := os.Mkdir(patchdockFolder, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", patchdockFolder, err)
+	if err := os.Mkdir(phdDir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", phdDir, err)
 	}
 
 	for _, file := range scaffoldFiles {
-		if err = processFile(patchdockFolder, file); err != nil {
+		if err = processFile(phdDir, file); err != nil {
 			return err
 		}
 	}

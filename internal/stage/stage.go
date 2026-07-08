@@ -84,22 +84,7 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 		return nil, fmt.Errorf("failed to write %s: %w", Input, err)
 	}
 
-	env := map[string]string{
-		"PATCHDOCK_STAGE":   string(op.stage),
-		"PATCHDOCK_TASK_ID": op.taskID,
-	}
-	if op.agentFile != "" {
-		env["PATCHDOCK_AGENT_FILE"] = op.agentFile
-	}
-	if op.maxTokens > 0 {
-		env["PATCHDOCK_TOKEN_BUDGET"] = strconv.Itoa(op.maxTokens)
-	}
-	if op.attempt > 0 {
-		env["PATCHDOCK_ATTEMPT"] = strconv.Itoa(op.attempt)
-	}
-	if op.maxAttempts > 0 {
-		env["PATCHDOCK_MAX_ATTEMPTS"] = strconv.Itoa(op.maxAttempts)
-	}
+	env := getEnv(op)
 
 	logs, runRes := c.Run(ctx, docker.RunSpec{
 		Image:      op.image,
@@ -139,4 +124,25 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 	}
 
 	return content, nil
+}
+
+func getEnv(op opts) map[string]string {
+	env := map[string]string{
+		"PATCHDOCK_STAGE":   string(op.stage),
+		"PATCHDOCK_TASK_ID": op.taskID,
+	}
+	if op.agentFile != "" {
+		env["PATCHDOCK_AGENT_FILE"] = op.agentFile
+	}
+	if op.maxTokens > 0 {
+		env["PATCHDOCK_TOKEN_BUDGET"] = strconv.Itoa(op.maxTokens)
+	}
+	if op.attempt > 0 {
+		env["PATCHDOCK_ATTEMPT"] = strconv.Itoa(op.attempt)
+	}
+	if op.maxAttempts > 0 {
+		env["PATCHDOCK_MAX_ATTEMPTS"] = strconv.Itoa(op.maxAttempts)
+	}
+
+	return env
 }

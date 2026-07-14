@@ -1,14 +1,12 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"strings"
 
 	"github.com/HJyup/patchdock/internal/types"
+	"github.com/HJyup/patchdock/internal/validate"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -16,68 +14,29 @@ var requiredStages = []types.StageName{types.StagePlanner, types.StageExecutor, 
 
 var configValidator = newConfigValidator()
 
-func newConfigValidator() *validator.Validate {
-	v := validator.New(validator.WithRequiredStructEnabled())
+func newConfigValidator() *validate.Validator {
+	v := validate.New("yaml", map[string]validate.Translator{
+		"gt": func(path string, fieldErr validator.FieldError) error {
+			return fmt.Errorf("%s: must be > %s", path, fieldErr.Param())
+		},
+		"min": func(path string, fieldErr validator.FieldError) error {
+			return fmt.Errorf("%s: must contain at least %s item", path, fieldErr.Param())
+		},
+		"tsfile": func(path string, _ validator.FieldError) error {
+			return fmt.Errorf("%s: must be a .ts file", path)
+		},
+		"stage_missing": func(path string, _ validator.FieldError) error {
+			return fmt.Errorf("%s: missing", path)
+		},
+	})
 
-	v.RegisterTagNameFunc(yamlFieldName)
 	v.RegisterValidation("tsfile", validateTSFile)
 	v.RegisterStructValidation(validateStages, Config{})
 	return v
 }
 
-func yamlFieldName(f reflect.StructField) string {
-	name := strings.Split(f.Tag.Get("yaml"), ",")[0]
-	switch name {
-	case "", "-":
-		return f.Name
-	default:
-		return name
-	}
-}
-
 func (c *Config) Validate() error {
-	return validateStruct(c, "config")
-}
-
-func (c *Config) validate() error {
-	if c == nil {
-		return validateStruct(c, "config")
-	}
-	return c.Validate()
-}
-
-func validateStruct(value any, root string) error {
-	if value == nil {
-		return fmt.Errorf("%s: nil", root)
-	}
-
-	rv := reflect.ValueOf(value)
-	if rv.Kind() == reflect.Pointer && rv.IsNil() {
-		return fmt.Errorf("%s: nil", root)
-	}
-
-	err := configValidator.Struct(value)
-	if err == nil {
-		return nil
-	}
-
-	if invalid, ok := errors.AsType[*validator.InvalidValidationError](err); ok {
-		return fmt.Errorf("%s: %w", root, invalid)
-	}
-
-	var fieldErrors validator.ValidationErrors
-	if !errors.As(err, &fieldErrors) {
-		return err
-	}
-
-	errs := make([]error, 0, len(fieldErrors))
-	for _, fieldErr := range fieldErrors {
-		errs = append(errs, translate(fieldErr, root))
-	}
-	sort.Slice(errs, func(i, j int) bool {
-		return errs[i].Error() < errs[j].Error()
-	})
-	return errors.Join(errs...)
+	return configValidator.Struct(c, "config")
 }
 
 func validateStages(sl validator.StructLevel) {
@@ -95,39 +54,4 @@ func validateTSFile(fl validator.FieldLevel) bool {
 		return false
 	}
 	return strings.EqualFold(filepath.Ext(path), ".ts")
-}
-
-func translate(fieldErr validator.FieldError, root string) error {
-	path := errorPath(fieldErr.Namespace(), root)
-	switch fieldErr.Tag() {
-	case "required":
-		return fmt.Errorf("%s: empty", path)
-	case "gt":
-		return fmt.Errorf("%s: must be > %s", path, fieldErr.Param())
-	case "gte":
-		return fmt.Errorf("%s: must be >= %s", path, fieldErr.Param())
-	case "min":
-		return fmt.Errorf("%s: must contain at least %s item", path, fieldErr.Param())
-	case "oneof":
-		return fmt.Errorf("%s: invalid value %q", path, fieldErr.Value())
-	case "tsfile":
-		return fmt.Errorf("%s: must be a .ts file", path)
-	case "stage_missing":
-		return fmt.Errorf("%s: missing", path)
-	default:
-		if fieldErr.Param() == "" {
-			return fmt.Errorf("%s: failed %s validation", path, fieldErr.Tag())
-		}
-		return fmt.Errorf("%s: failed %s=%s validation", path, fieldErr.Tag(), fieldErr.Param())
-	}
-}
-
-func errorPath(namespace, root string) string {
-	if namespace == "" {
-		return root
-	}
-	if dot := strings.Index(namespace, "."); dot >= 0 {
-		return root + namespace[dot:]
-	}
-	return root
 }

@@ -55,10 +55,10 @@ func run(ctx context.Context, cli *client.Client, spec RunSpec) (<-chan LogLine,
 		defer close(res)
 
 		if spec.Timeout > 0 {
-              var cancel context.CancelFunc
-              ctx, cancel = context.WithTimeout(ctx, spec.Timeout)
-              defer cancel()
-      }
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, spec.Timeout)
+			defer cancel()
+		}
 
 		for _, m := range spec.Mounts {
 			if !filepath.IsAbs(m.Source) {

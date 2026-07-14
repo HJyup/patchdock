@@ -5,7 +5,6 @@ import "github.com/HJyup/patchdock/internal/types"
 type Config struct {
 	Container Container                  `yaml:"container"`
 	Retries   Retries                    `yaml:"retries"`
-	Checks    []Check                    `yaml:"checks" validate:"omitempty,min=1,dive"`
 	Stages    map[types.StageName]string `yaml:"stages" validate:"dive,keys,oneof=planner executor reviewer,endkeys,required,tsfile"`
 }
 
@@ -17,9 +16,4 @@ type Container struct {
 
 type Retries struct {
 	Max int `yaml:"max" validate:"gte=0"`
-}
-
-type Check struct {
-	Name string `yaml:"name" validate:"required"`
-	Run  string `yaml:"run" validate:"required"`
 }

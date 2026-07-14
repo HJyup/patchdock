@@ -37,7 +37,7 @@ type RunSpec struct {
 	Mounts     []Mount
 	Env        map[string]string // joined to KEY=VALUE by Run
 	Labels     map[string]string // e.g. patchdock.task-id
-	Entrypoint []string          // nil = image default; set to override (check mode)
+	Entrypoint []string          // nil = image default; set to override
 	Timeout    time.Duration     // wall-clock ceiling for the run; 0 = unlimited.
 }
 

@@ -7,7 +7,6 @@ const (
 	DefaultTokenBudget   = 100000
 	DefaultMaxContainers = 4
 	DefaultRetriesMax    = 1
-	DefaultImage         = "node:22-slim"
 )
 
 func Defaults() Config {

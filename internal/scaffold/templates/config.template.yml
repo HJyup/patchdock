@@ -22,8 +22,10 @@ retries:
 # Deterministic checks run against the executor's diff, in the order listed.
 # Each is a shell command
 checks:
-  - name: build          # human-readable label, shown in logs and the audit trail
-    run: go build ./...   # the command to run inside the container
+  -image: "node:22-slim"
+  -run:
+    - name: build          # human-readable label, shown in logs and the audit trail
+      cmd: pnpm test       # the command to run inside the container
 
 # Which filepath drives each stage
 stages:

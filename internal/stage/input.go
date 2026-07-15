@@ -1,6 +1,19 @@
 package stage
 
-import "github.com/HJyup/patchdock/internal/types"
+import (
+	"io"
+	"time"
+
+	"github.com/HJyup/patchdock/internal/types"
+)
+
+type AgentOpts struct {
+	Image     string
+	AgentsDir string
+	LogWriter io.Writer
+	Timeout   time.Duration
+	MaxTokens int
+}
 
 type PlannerInput struct {
 	Task types.Task `json:"task"`

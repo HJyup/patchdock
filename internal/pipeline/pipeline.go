@@ -44,8 +44,8 @@ func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDi
 	}
 }
 
-func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
-	err := p.validateEnv(ctx)
+func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err error) {
+	err = p.validateEnv(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -65,24 +65,31 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 	defer logger.Close()
 
-	out := &Outcome{
+	out = &Outcome{
 		TaskID:   task.ID,
 		Accepted: false,
 	}
-	defer writeOutcome(logger, out)
+	defer func() {
+		if werr := writeOutcome(logger, out); werr != nil {
+			err = werr
+		}
+	}()
+
+	agentsCfg := stage.AgentOpts{
+		Image:     p.image,
+		AgentsDir: p.agentsDir,
+		LogWriter: logger,
+		Timeout:   p.cfg.Container.Timeout.Duration(),
+		MaxTokens: p.cfg.Container.TokenBudget,
+	}
 
 	plan, err := stage.RunPlanner(ctx, p.cli, stage.PlannerInput{Task: task}, stage.PlannerOpts{
-		Image:       p.image,
 		Dir:         env.PlannerPath(),
 		RepoDir:     p.repoDir,
-		AgentsDir:   p.agentsDir,
-		LogWriter:   logger,
-		Timeout:     p.cfg.Container.Timeout.Duration(),
-		MaxTokens:   p.cfg.Container.TokenBudget,
 		AgentFile:   p.cfg.Stages[types.StagePlanner],
 		Attempt:     1,
 		MaxAttempts: 1,
-	})
+	}, agentsCfg)
 	if err != nil {
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
@@ -101,17 +108,12 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			Plan:    plan,
 			Reviews: history.Reviews,
 		}, stage.ExecutorOpts{
-			Image:        p.image,
 			Dir:          env.ExecutorPath(attempt),
 			WorkspaceDir: wks.Dir,
-			AgentsDir:    p.agentsDir,
-			LogWriter:    logger,
-			Timeout:      p.cfg.Container.Timeout.Duration(),
-			MaxTokens:    p.cfg.Container.TokenBudget,
 			AgentFile:    p.cfg.Stages[types.StageExecutor],
 			Attempt:      attempt + 1,
 			MaxAttempts:  p.maxRetries + 1,
-		})
+		}, agentsCfg)
 		if err != nil {
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
@@ -131,17 +133,12 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			ExecutionResults: history.Executions,
 			PreviousReviews:  history.Reviews,
 		}, stage.ReviewerOpts{
-			Image:        p.image,
 			Dir:          env.ReviewPath(attempt),
 			WorkspaceDir: wks.Dir,
-			AgentsDir:    p.agentsDir,
-			LogWriter:    logger,
-			Timeout:      p.cfg.Container.Timeout.Duration(),
-			MaxTokens:    p.cfg.Container.TokenBudget,
 			AgentFile:    p.cfg.Stages[types.StageReviewer],
 			Attempt:      attempt + 1,
 			MaxAttempts:  p.maxRetries + 1,
-		})
+		}, agentsCfg)
 		if err != nil {
 			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
@@ -165,7 +162,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	return out, nil
 }
 
-// writeOutcome TODO: fix how to make errors returnable
 func writeOutcome(logger *auditlog.Logger, out *Outcome) error {
 	bytes, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {

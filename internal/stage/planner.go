@@ -3,46 +3,39 @@ package stage
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"time"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
 )
 
 type PlannerOpts struct {
-	Image     string
-	Dir       string
-	LogWriter io.Writer
+	Dir string
 	// RepoDir, when set, is the target repository mounted read-only at /repo
 	// so the planner can explore the code it plans against.
-	RepoDir   string
-	AgentsDir string
+	RepoDir string
 
-	Timeout     time.Duration
-	MaxTokens   int
 	AgentFile   string
 	Attempt     int
 	MaxAttempts int
 }
 
-func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpts PlannerOpts) (types.Plan, error) {
+func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpts PlannerOpts, agentOpts AgentOpts) (types.Plan, error) {
 	var mounts []docker.Mount
 	if plOpts.RepoDir != "" {
 		mounts = append(mounts, docker.Mount{Source: plOpts.RepoDir, Target: RepoTarget, ReadOnly: true})
 	}
 
 	raw, err := runStage(ctx, c, opts{
-		image:       plOpts.Image,
+		image:       agentOpts.Image,
 		stage:       types.StagePlanner,
 		taskID:      input.Task.ID,
 		dir:         plOpts.Dir,
 		mounts:      mounts,
-		agentsPath:  plOpts.AgentsDir,
-		logger:      plOpts.LogWriter,
+		agentsPath:  agentOpts.AgentsDir,
+		logger:      agentOpts.LogWriter,
 		agentFile:   plOpts.AgentFile,
-		timeout:     plOpts.Timeout,
-		maxTokens:   plOpts.MaxTokens,
+		timeout:     agentOpts.Timeout,
+		maxTokens:   agentOpts.MaxTokens,
 		attempt:     plOpts.Attempt,
 		maxAttempts: plOpts.MaxAttempts,
 	}, input)

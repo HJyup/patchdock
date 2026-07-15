@@ -49,12 +49,13 @@ describe("reviewerInputSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  test("accepts an execution result without a patch (failed before modifying)", () => {
-    const { patch, ...withoutPatch } = fullExecutionResult();
+  test("accepts an execution result without patch and notes (failed early)", () => {
+    const { patch, notes, ...bare } = fullExecutionResult();
     void patch;
+    void notes;
     const result = reviewerInputSchema.safeParse({
       plan: fullPlan(),
-      execution_results: [withoutPatch],
+      execution_results: [bare],
       previous_reviews: [],
     });
     expect(result.success).toBe(true);
@@ -62,32 +63,23 @@ describe("reviewerInputSchema", () => {
 });
 
 describe("planDataSchema (planner output)", () => {
-  test("accepts a minimal plan: no rationale, files, context, or assumptions", () => {
+  test("accepts a minimal plan: summary plus markdown body", () => {
     const result = planDataSchema.safeParse({
-      approach: "small focused change",
-      acceptance_criteria: ["it works"],
-      steps: [{ id: "step-1", description: "do it" }],
+      summary: "small focused change",
+      body: "## Steps\n1. do it",
     });
     expect(result.success).toBe(true);
   });
 
-  test("rejects empty acceptance_criteria and empty steps", () => {
-    const base = {
-      approach: "a",
-      acceptance_criteria: ["done"],
-      steps: [{ id: "s", description: "d" }],
-    };
-    expect(planDataSchema.safeParse({ ...base, acceptance_criteria: [] }).success).toBe(
-      false,
-    );
-    expect(planDataSchema.safeParse({ ...base, steps: [] }).success).toBe(false);
+  test("rejects an empty summary or body", () => {
+    expect(planDataSchema.safeParse({ summary: "", body: "b" }).success).toBe(false);
+    expect(planDataSchema.safeParse({ summary: "s", body: "" }).success).toBe(false);
   });
 
   test("does not accept id/task_id — identity belongs to the host", () => {
     const result = planDataSchema.safeParse({
-      approach: "a",
-      acceptance_criteria: ["done"],
-      steps: [{ id: "s", description: "d" }],
+      summary: "s",
+      body: "b",
       id: "plan-forged",
       task_id: "task-forged",
     });
@@ -100,10 +92,36 @@ describe("planDataSchema (planner output)", () => {
 });
 
 describe("reviewDataSchema (reviewer output)", () => {
-  test("accepts an accept decision without issues", () => {
+  test("accepts an accept decision without feedback", () => {
     const result = reviewDataSchema.safeParse({
       decision: "accept",
       summary: "looks good",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts an accept decision with optional feedback (nits)", () => {
+    const result = reviewDataSchema.safeParse({
+      decision: "accept",
+      summary: "looks good",
+      feedback: "minor: naming nit, fine to ship",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects a reject decision without feedback (retry must not fly blind)", () => {
+    const result = reviewDataSchema.safeParse({
+      decision: "reject",
+      summary: "does not compile",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts a reject decision with feedback", () => {
+    const result = reviewDataSchema.safeParse({
+      decision: "reject",
+      summary: "does not compile",
+      feedback: "- **blocker** — src/greet.ts:12 missing closing brace",
     });
     expect(result.success).toBe(true);
   });

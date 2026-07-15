@@ -4,10 +4,9 @@ import "testing"
 
 func validPlan() Plan {
 	return Plan{
-		TaskID:             "task-1",
-		Approach:           "fix the bug in one file",
-		AcceptanceCriteria: []string{"tests pass"},
-		Steps:              []Step{{ID: "s1", Description: "edit the file"}},
+		TaskID:  "task-1",
+		Summary: "fix the bug in one file",
+		Body:    "## Approach\nEdit the file.\n\n## Acceptance criteria\n- tests pass",
 	}
 }
 
@@ -17,46 +16,52 @@ func TestNewPlanAcceptsValid(t *testing.T) {
 	}
 }
 
-func TestPlanDuplicateStepIDs(t *testing.T) {
+func TestPlanRequiresSummaryAndBody(t *testing.T) {
 	p := validPlan()
-	p.Steps = []Step{
-		{ID: "s1", Description: "first"},
-		{ID: "s1", Description: "second"},
-	}
+	p.Summary = ""
+	p.Body = ""
 
 	_, err := NewPlan(p)
-	assertError(t, err, "plan.steps[1].id: duplicate of steps[0].id")
+	assertError(t, err, "plan.summary: empty\n"+
+		"plan.body: empty")
 }
 
-func TestPlanEmptyAcceptanceCriteria(t *testing.T) {
-	p := validPlan()
-	p.AcceptanceCriteria = nil
-
-	_, err := NewPlan(p)
-	assertError(t, err, "plan.acceptance_criteria: empty")
-}
-
-func TestReviewRejectRequiresIssues(t *testing.T) {
+func TestReviewRejectRequiresFeedback(t *testing.T) {
 	_, err := NewReview(Review{
 		TaskID:      "task-1",
 		ExecutionID: "exec-1",
 		Decision:    ReviewReject,
 		Summary:     "does not compile",
 	})
-	assertError(t, err, "review.issues: required when decision is reject")
+	assertError(t, err, "review.feedback: required when decision is reject")
 }
 
-func TestReviewAcceptForbidsIssues(t *testing.T) {
-	_, err := NewReview(Review{
+func TestReviewAcceptAllowsOptionalFeedback(t *testing.T) {
+	base := Review{
 		TaskID:      "task-1",
 		ExecutionID: "exec-1",
 		Decision:    ReviewAccept,
 		Summary:     "looks good",
-		Issues: []ReviewIssue{
-			{Severity: SeverityMinor, Message: "nit"},
-		},
+	}
+
+	if _, err := NewReview(base); err != nil {
+		t.Fatalf("accept without feedback rejected: %v", err)
+	}
+
+	base.Feedback = "minor: naming nit in greet.ts, fine to ship"
+	if _, err := NewReview(base); err != nil {
+		t.Fatalf("accept with feedback rejected: %v", err)
+	}
+}
+
+func TestReviewInvalidDecision(t *testing.T) {
+	_, err := NewReview(Review{
+		TaskID:      "task-1",
+		ExecutionID: "exec-1",
+		Decision:    "maybe",
+		Summary:     "hmm",
 	})
-	assertError(t, err, "review.issues: must be empty when decision is accept")
+	assertError(t, err, `review.decision: invalid value "maybe"`)
 }
 
 func TestExecutionResultInvalidStatus(t *testing.T) {
@@ -68,12 +73,12 @@ func TestExecutionResultInvalidStatus(t *testing.T) {
 	assertError(t, err, `execution_result.status: invalid value "weird"`)
 }
 
-func TestReviewJoinsAndSortsMultipleErrors(t *testing.T) {
+func TestReviewJoinsMultipleErrorsInFieldOrder(t *testing.T) {
 	_, err := NewReview(Review{})
-	assertError(t, err, "review.decision: empty\n"+
+	assertError(t, err, "review.task_id: empty\n"+
 		"review.execution_id: empty\n"+
-		"review.summary: empty\n"+
-		"review.task_id: empty")
+		"review.decision: empty\n"+
+		"review.summary: empty")
 }
 
 func assertError(t *testing.T, err error, want string) {

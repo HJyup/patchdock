@@ -22,23 +22,33 @@ func TestValidateAcceptsDefaultsWithStages(t *testing.T) {
 	}
 }
 
-func TestValidateTranslatesFieldErrors(t *testing.T) {
+func TestValidateFieldErrors(t *testing.T) {
 	tests := []struct {
 		name   string
 		mutate func(*Config)
 		want   string
 	}{
 		{
-			name:   "missing stages reports each stage sorted",
+			name:   "missing stages reports each stage in pipeline order",
 			mutate: func(c *Config) { c.Stages = nil },
-			want: "config.stages.executor: missing\n" +
-				"config.stages.planner: missing\n" +
-				"config.stages.reviewer: missing",
+			want: "config.stages[planner]: missing\n" +
+				"config.stages[executor]: missing\n" +
+				"config.stages[reviewer]: missing",
 		},
 		{
 			name:   "stage file must be typescript",
 			mutate: func(c *Config) { c.Stages[types.StagePlanner] = "planner.js" },
 			want:   "config.stages[planner]: must be a .ts file",
+		},
+		{
+			name:   "stage file must not be empty",
+			mutate: func(c *Config) { c.Stages[types.StageReviewer] = "" },
+			want:   "config.stages[reviewer]: empty",
+		},
+		{
+			name:   "unknown stage keys are rejected",
+			mutate: func(c *Config) { c.Stages["deployer"] = "deployer.ts" },
+			want:   "config.stages[deployer]: unknown stage",
 		},
 		{
 			name:   "negative timeout",

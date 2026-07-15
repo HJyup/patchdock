@@ -1,57 +1,63 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/HJyup/patchdock/internal/types"
-	"github.com/HJyup/patchdock/internal/validate"
-	"github.com/go-playground/validator/v10"
 )
 
 var requiredStages = []types.StageName{types.StagePlanner, types.StageExecutor, types.StageReviewer}
 
-var configValidator = newConfigValidator()
-
-func newConfigValidator() *validate.Validator {
-	v := validate.New("yaml", map[string]validate.Translator{
-		"gt": func(path string, fieldErr validator.FieldError) error {
-			return fmt.Errorf("%s: must be > %s", path, fieldErr.Param())
-		},
-		"min": func(path string, fieldErr validator.FieldError) error {
-			return fmt.Errorf("%s: must contain at least %s item", path, fieldErr.Param())
-		},
-		"tsfile": func(path string, _ validator.FieldError) error {
-			return fmt.Errorf("%s: must be a .ts file", path)
-		},
-		"stage_missing": func(path string, _ validator.FieldError) error {
-			return fmt.Errorf("%s: missing", path)
-		},
-	})
-
-	v.RegisterValidation("tsfile", validateTSFile)
-	v.RegisterStructValidation(validateStages, Config{})
-	return v
-}
-
+// Validate reports every problem as "path: problem" lines so a user can fix
+// the whole file in one pass.
 func (c *Config) Validate() error {
-	return configValidator.Struct(c, "config")
-}
+	var errs []error
+	addf := func(format string, args ...any) {
+		errs = append(errs, fmt.Errorf(format, args...))
+	}
 
-func validateStages(sl validator.StructLevel) {
-	c := sl.Current().Interface().(Config)
+	if c.Container.Timeout < 0 {
+		addf("config.container.timeout: must be >= 0")
+	}
+	if c.Container.TokenBudget < 0 {
+		addf("config.container.token_budget: must be >= 0")
+	}
+	if c.Container.MaxContainers < 0 {
+		addf("config.container.max_containers: must be >= 0")
+	}
+	if c.Retries.Max < 0 {
+		addf("config.retries.max: must be >= 0")
+	}
+
 	for _, stage := range requiredStages {
-		if _, ok := c.Stages[stage]; !ok {
-			sl.ReportError(c.Stages, "stages."+string(stage), "Stages", "stage_missing", "")
+		file, ok := c.Stages[stage]
+		if !ok {
+			addf("config.stages[%s]: missing", stage)
+			continue
+		}
+		if file == "" {
+			addf("config.stages[%s]: empty", stage)
+			continue
+		}
+		if !strings.EqualFold(filepath.Ext(file), ".ts") {
+			addf("config.stages[%s]: must be a .ts file", stage)
 		}
 	}
-}
 
-func validateTSFile(fl validator.FieldLevel) bool {
-	path, ok := fl.Field().Interface().(string)
-	if !ok {
-		return false
+	var unknown []string
+	for stage := range c.Stages {
+		if !slices.Contains(requiredStages, stage) {
+			unknown = append(unknown, string(stage))
+		}
 	}
-	return strings.EqualFold(filepath.Ext(path), ".ts")
+	slices.Sort(unknown)
+	for _, stage := range unknown {
+		addf("config.stages[%s]: unknown stage", stage)
+	}
+
+	return errors.Join(errs...)
 }

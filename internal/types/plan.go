@@ -6,46 +6,20 @@ import (
 	"github.com/HJyup/patchdock/internal/id"
 )
 
-// Plan is the planner stage's output: an ordered, immutable description of
-// the work the executor should attempt for a single task attempt.
+// Plan is the planner stage's output: an immutable description of the work
+// the executor should attempt for a single task.
 type Plan struct {
-	ID        string    `json:"id" validate:"required"`
-	TaskID    string    `json:"task_id" validate:"required"`
-	CreatedAt time.Time `json:"created_at" validate:"required"`
+	ID        string    `json:"id"`         // runtime-filled
+	TaskID    string    `json:"task_id"`    // runtime-filled
+	CreatedAt time.Time `json:"created_at"` // runtime-filled
 
-	// Approach is the planner's 1-3 sentence summary of the overall strategy.
-	Approach string `json:"approach" validate:"required"`
+	// Summary is the planner's 1-2 sentence account of the strategy,
+	// surfaced in run results and status output.
+	Summary string `json:"summary"`
 
-	// AcceptanceCriteria is the planner's definition of "done" — what would
-	// have to be true for this task to be considered complete. Used by the
-	// executor as a self-check and by the reviewer as the evaluation bar.
-	// Required (non-empty).
-	AcceptanceCriteria []string `json:"acceptance_criteria" validate:"min=1,dive,required"`
-	Steps              []Step   `json:"steps" validate:"min=1,dive"`
-
-	// Context captures facts the planner discovered while exploring the repo
-	// that the executor would otherwise re-discover. Saves tokens and reduces drift
-	// between planner and executor understanding.
-	Context []string `json:"context,omitempty"`
-
-	// Assumptions the planner made that may not hold at execution time.
-	Assumptions []string `json:"assumptions,omitempty"`
-}
-
-// Step is one unit of work in a Plan. The executor produces one StepResult
-// per Step, keyed by Step.ID.
-type Step struct {
-	ID          string `json:"id" validate:"required"`
-	Description string `json:"description" validate:"required"`
-
-	// Rationale is why this step is necessary.
-	// Optional: a step whose description carries its own justification may
-	// leave it empty.
-	Rationale string `json:"rationale,omitempty"`
-
-	// FilesToModify is the planner's intent.
-	// Executor may modify additional files
-	FilesToModify []string `json:"files_to_modify,omitempty"`
+	// Body is the full plan as markdown. Consumed by the executor and reviewer,
+	// never parsed by the runtime.
+	Body string `json:"body"`
 }
 
 func NewPlan(p Plan) (Plan, error) {
@@ -62,5 +36,13 @@ func NewPlan(p Plan) (Plan, error) {
 }
 
 func (p *Plan) validate() error {
-	return validateStruct(p, "plan")
+	var e errs
+	e.required("plan.id", p.ID)
+	e.required("plan.task_id", p.TaskID)
+	if p.CreatedAt.IsZero() {
+		e.addf("plan.created_at: empty")
+	}
+	e.required("plan.summary", p.Summary)
+	e.required("plan.body", p.Body)
+	return e.join()
 }

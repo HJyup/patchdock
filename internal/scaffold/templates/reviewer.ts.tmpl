@@ -6,21 +6,19 @@ export default defineReviewer({
     ctx.log(`Reviewing ${input.execution_results.length} execution result(s).`);
 
     if (latest?.status === "failed") {
+      // A reject must always carry feedback — it becomes the executor's
+      // context on the next attempt. List issues with severity and
+      // file:line references so the retry knows exactly what to fix.
       return {
         decision: "reject",
         summary: "The latest execution failed.",
-        issues: [
-          {
-            severity: "major",
-            message: "Executor reported a failed status.",
-          },
-        ],
+        feedback: "- **blocker** — executor reported a failed status; re-run the plan.",
       };
     }
 
     return {
       decision: "accept",
-      summary: "Default scaffold reviewer accepted the latest execution.",
+      summary: "Default scaffold reviewer accepts the latest execution.",
     };
   },
 });

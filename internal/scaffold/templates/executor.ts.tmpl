@@ -2,15 +2,13 @@ import { defineExecutor } from "@patchdock/sdk";
 
 export default defineExecutor({
   async run(ctx, input) {
-    ctx.log(`Executing ${input.plan.steps.length} planned step(s).`);
+    ctx.log(`Executing plan: ${input.plan.summary}`);
 
+    // A real executor edits files under ctx.paths.workspace; Patchdock
+    // extracts the resulting git diff as the authoritative patch.
     return {
       status: "success",
-      step_results: input.plan.steps.map((step) => ({
-        step_id: step.id,
-        status: "success",
-        notes: "Default scaffold executor did not modify files.",
-      })),
+      notes: "Default scaffold executor did not modify files.",
     };
   },
 });

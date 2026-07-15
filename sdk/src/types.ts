@@ -2,7 +2,6 @@ import { z } from "zod";
 
 const executionStatusSchema = z.enum(["success", "partial_success", "failed"]);
 const reviewDecisionSchema = z.enum(["accept", "reject"]);
-const issueSeveritySchema = z.enum(["blocker", "major", "minor"]);
 
 const taskSchema = z.object({
   id: z.string().min(1),
@@ -11,19 +10,14 @@ const taskSchema = z.object({
   labels: z.array(z.string()).optional(),
 });
 
-const stepSchema = z.object({
-  id: z.string().min(1),
-  description: z.string().min(1),
-  rationale: z.string().optional(),
-  files_to_modify: z.array(z.string()).optional(),
-});
+// Agent-authored payloads are deliberately loose: a short summary the
+// runtime displays, plus one markdown field the next stage reads. Structure
+// inside the prose (steps, issue lists, severities) is a prompt convention —
+// only fields the runtime branches on or displays are typed strictly.
 
 export const planDataSchema = z.object({
-  approach: z.string().min(1),
-  acceptance_criteria: z.array(z.string().min(1)).min(1),
-  steps: z.array(stepSchema).min(1),
-  context: z.array(z.string()).optional(),
-  assumptions: z.array(z.string()).optional(),
+  summary: z.string().min(1),
+  body: z.string().min(1),
 });
 
 const planSchema = planDataSchema.extend({
@@ -32,21 +26,9 @@ const planSchema = planDataSchema.extend({
   created_at: z.string(),
 });
 
-const stepResultSchema = z.object({
-  step_id: z.string().min(1),
-  status: executionStatusSchema,
-  notes: z.string().optional(),
-});
-
-const executionErrorSchema = z.object({
-  step_id: z.string().optional(),
-  message: z.string().min(1),
-});
-
 export const executionResultDataSchema = z.object({
   status: executionStatusSchema,
-  step_results: z.array(stepResultSchema),
-  errors: z.array(executionErrorSchema).optional(),
+  notes: z.string().optional(),
 });
 
 const executionResultSchema = executionResultDataSchema.extend({
@@ -56,22 +38,21 @@ const executionResultSchema = executionResultDataSchema.extend({
   patch: z.string().optional(),
 });
 
-const reviewIssueSchema = z.object({
-  severity: issueSeveritySchema,
-  message: z.string().min(1),
-  step_id: z.string().optional(),
-  file_path: z.string().optional(),
-  line_range: z.string().optional(),
-  suggestion: z.string().optional(),
-});
-
-export const reviewDataSchema = z.object({
+const reviewFields = z.object({
   decision: reviewDecisionSchema,
-  issues: z.array(reviewIssueSchema).optional(),
   summary: z.string().min(1),
+  feedback: z.string().optional(),
 });
 
-const reviewSchema = reviewDataSchema.extend({
+// A reject must carry feedback so a retry never flies blind.
+export const reviewDataSchema = reviewFields.refine(
+  (r) => r.decision !== "reject" || (r.feedback ?? "").length > 0,
+  { message: "feedback is required when decision is reject", path: ["feedback"] },
+);
+
+// Host-stitched reviews were already validated on the host, so inputs reuse
+// the plain field shape without re-running the cross-field rule.
+const reviewSchema = reviewFields.extend({
   id: z.string().min(1),
   task_id: z.string().min(1),
   execution_id: z.string().min(1),

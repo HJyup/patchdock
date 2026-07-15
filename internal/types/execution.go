@@ -7,67 +7,62 @@ import "github.com/HJyup/patchdock/internal/id"
 // One ExecutionResult per executor invocation. A retry (after a reject)
 // produces a fresh ExecutionResult; the old one is preserved for audit.
 type ExecutionResult struct {
-	ID string `json:"id" validate:"required"`
+	ID     string `json:"id"`      // runtime-filled
+	TaskID string `json:"task_id"` // runtime-filled
+	PlanID string `json:"plan_id"` // runtime-filled
 
-	TaskID string          `json:"task_id" validate:"required"`
-	PlanID string          `json:"plan_id" validate:"required"`
-	Status ExecutionStatus `json:"status" validate:"required,oneof=success partial_success failed"`
+	// Status summarizes the attempt — the only structured claim the
+	// executor makes. Everything else it wants to say goes in Notes.
+	Status ExecutionStatus `json:"status"`
 
-	// Patch is the unified diff against the target repo, as the executor sees it.
-	// Empty when Status is Failed before any modification happened.
+	// Patch is the unified diff against the base commit, extracted from the
+	// workspace by the runtime after the container exits. Never authored by
+	// the agent. Empty when nothing was modified.
 	Patch string `json:"patch,omitempty"`
 
-	// StepResults are an in-order prefix of Plan.Steps, keyed by Step.ID.
-	// Missing trailing entries mean "executor didn't get this far."
-	StepResults []StepResult `json:"step_results" validate:"dive"`
-
-	// Errors records things that went wrong during execution. (Not opinions about the output)
-	Errors []ExecutionError `json:"errors,omitempty" validate:"dive"`
+	// Notes is the executor's markdown account of what it did, what worked,
+	// and what didn't. Consumed by the reviewer and by retry attempts.
+	Notes string `json:"notes,omitempty"`
 }
 
 // ExecutionStatus summarizes the outcome of an execution attempt.
 type ExecutionStatus string
 
 const (
-	// ExecutionSuccess every Step completed; Patch is the proposed change.
+	// ExecutionSuccess the executor completed the plan; Patch is the proposed change.
 	ExecutionSuccess ExecutionStatus = "success"
 
-	// ExecutionPartialSuccess some Steps completed, others did not.
-	// Patch reflects what was completed; reviewer decides whether to accept.
+	// ExecutionPartialSuccess part of the plan was completed. Patch reflects
+	// what was done; the reviewer decides whether to accept.
 	ExecutionPartialSuccess ExecutionStatus = "partial_success"
 
 	// ExecutionFailed unrecoverable failure. Patch may be empty or partial.
 	ExecutionFailed ExecutionStatus = "failed"
 )
 
-// StepResult is the executor's record of one Step.
-type StepResult struct {
-	StepID string          `json:"step_id" validate:"required"`
-	Status ExecutionStatus `json:"status" validate:"required,oneof=success partial_success failed"`
-
-	// Notes is the executor's optional human-readable commentary on this step
-	Notes string `json:"notes,omitempty"`
-}
-
-// ExecutionError is a harness-level failure during execution.
-type ExecutionError struct {
-	// StepID, if set, scopes the error to one Step. Empty means whole-execution.
-	StepID  string `json:"step_id,omitempty"`
-	Message string `json:"message" validate:"required"`
-}
-
 // NewExecutionResult completes a caller-assembled ExecutionResult and
 // validates it. A zero ID is generated; a set ID is kept for determinism.
-func NewExecutionResult(e ExecutionResult) (ExecutionResult, error) {
-	if e.ID == "" {
-		e.ID = id.New("exec")
+func NewExecutionResult(x ExecutionResult) (ExecutionResult, error) {
+	if x.ID == "" {
+		x.ID = id.New("exec")
 	}
-	if err := e.validate(); err != nil {
+	if err := x.validate(); err != nil {
 		return ExecutionResult{}, err
 	}
-	return e, nil
+	return x, nil
 }
 
-func (e *ExecutionResult) validate() error {
-	return validateStruct(e, "execution_result")
+func (x *ExecutionResult) validate() error {
+	var e errs
+	e.required("execution_result.id", x.ID)
+	e.required("execution_result.task_id", x.TaskID)
+	e.required("execution_result.plan_id", x.PlanID)
+	switch x.Status {
+	case ExecutionSuccess, ExecutionPartialSuccess, ExecutionFailed:
+	case "":
+		e.addf("execution_result.status: empty")
+	default:
+		e.addf("execution_result.status: invalid value %q", x.Status)
+	}
+	return e.join()
 }

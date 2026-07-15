@@ -14,9 +14,17 @@ export function fullPlan() {
     id: "plan-1",
     task_id: "task-1",
     created_at: "2026-07-02T21:27:04.949582Z",
-    approach: "small focused change",
-    acceptance_criteria: ["farewell exists and is tested"],
-    steps: [{ id: "step-1", description: "implement farewell" }],
+    summary: "small focused change",
+    body: [
+      "## Approach",
+      "Add a farewell function next to greet.",
+      "",
+      "## Steps",
+      "1. implement farewell",
+      "",
+      "## Acceptance criteria",
+      "- farewell exists and is tested",
+    ].join("\n"),
   };
 }
 
@@ -27,7 +35,7 @@ export function fullExecutionResult() {
     plan_id: "plan-1",
     status: "success",
     patch: "diff --git a/src/greet.ts b/src/greet.ts\n",
-    step_results: [{ step_id: "step-1", status: "success" }],
+    notes: "Implemented farewell in src/greet.ts.",
   };
 }
 
@@ -38,7 +46,7 @@ export function fullReview() {
     execution_id: "exec-1",
     decision: "reject",
     summary: "missing test",
-    issues: [{ severity: "major", message: "no test was added" }],
+    feedback: "- **major** — no test was added; cover farewell() with one test",
   };
 }
 

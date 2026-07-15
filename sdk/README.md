@@ -64,22 +64,18 @@ interface PlannerInput {
 }
 
 interface PlanData {
-  approach: string;
-  acceptance_criteria: string[];
-  steps: Array<{
-    id: string;
-    description: string;
-    rationale?: string;
-    files_to_modify?: string[];
-  }>;
-  context?: string[];
-  assumptions?: string[];
+  summary: string; // 1-2 sentences, shown in run results
+  body: string; // markdown: the full plan
 }
 
 type PlannerRun = (ctx: StageContext, input: PlannerInput) => Promise<PlanData>;
 ```
 
 Patchdock adds the plan ID, task ID, and creation timestamp after the planner returns.
+
+Structure inside `body` — approach, ordered steps, acceptance criteria — is a prompt
+convention for the executor and reviewer to read, not a schema. Keep the conventional
+headings so downstream stages know where to look.
 
 ### `defineExecutor`
 
@@ -105,15 +101,7 @@ interface ExecutorInput {
 
 interface ExecutionResultData {
   status: "success" | "partial_success" | "failed";
-  step_results: Array<{
-    step_id: string;
-    status: "success" | "partial_success" | "failed";
-    notes?: string;
-  }>;
-  errors?: Array<{
-    step_id?: string;
-    message: string;
-  }>;
+  notes?: string; // markdown: what was done, what worked, what didn't
 }
 
 type ExecutorRun = (
@@ -151,14 +139,7 @@ interface ReviewerInput {
 interface ReviewData {
   decision: "accept" | "reject";
   summary: string;
-  issues?: Array<{
-    severity: "blocker" | "major" | "minor";
-    message: string;
-    step_id?: string;
-    file_path?: string;
-    line_range?: string;
-    suggestion?: string;
-  }>;
+  feedback?: string; // markdown; required when decision is "reject"
 }
 
 type ReviewerRun = (ctx: StageContext, input: ReviewerInput) => Promise<ReviewData>;
@@ -166,6 +147,10 @@ type ReviewerRun = (ctx: StageContext, input: ReviewerInput) => Promise<ReviewDa
 
 Patchdock adds the review ID, task ID, and latest execution ID after the reviewer
 returns.
+
+On reject, `feedback` becomes the executor's context for the next attempt. By
+convention, list each issue with a severity and file:line reference so the retry knows
+exactly what to fix.
 
 ## Customising agent behaviour
 
@@ -337,13 +322,11 @@ The main rules agent authors need to respect are:
 
 - Default-export one definition matching the configured stage.
 - Return the output type belonging to that definition.
-- Use snake-case JSON field names such as `acceptance_criteria` and `step_results`.
-- Planner output requires a non-empty approach, acceptance criteria, and steps.
-- Executor status and step-result status must be `success`, `partial_success`, or
-  `failed`.
-- Reviewer decision must be `accept` or `reject`.
-- A rejected review must contain actionable issues; an accepted review must not contain
-  issues.
+- Use snake-case JSON field names such as `task_id` and `execution_results`.
+- Planner output requires a non-empty `summary` and `body`.
+- Executor `status` must be `success`, `partial_success`, or `failed`.
+- Reviewer `decision` must be `accept` or `reject`; a rejected review must carry
+  non-empty `feedback` (accepted reviews may include it for non-blocking notes).
 - Do not return runtime-owned IDs, timestamps, stage relationships, or the executor patch.
 - Write executor file changes only into the writable workspace.
 

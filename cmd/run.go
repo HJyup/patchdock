@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +15,7 @@ import (
 )
 
 const AgentName = "patchdock-agent:dev"
+const logsFile = ".patchdock/logs"
 
 var (
 	runIssues []int
@@ -28,13 +29,10 @@ var runCmd = &cobra.Command{
 	Long: `Runs task(s) through the full pipeline:
 		planner → executor → reviewer, each stage in its own
 		container, with typed validation at every boundary.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		switch {
 		case runPrompt != "":
-			if err := runTask(cmd.Context(), runPrompt); err != nil {
-				fmt.Fprintln(os.Stderr, "error:", err)
-				os.Exit(1)
-			}
+			return runTask(cmd.Context(), runPrompt)
 		case runAll:
 			fmt.Println("patchdock run: (skeleton) would fan out across every open GitHub issue in the repo")
 		case len(runIssues) > 0:
@@ -42,28 +40,32 @@ var runCmd = &cobra.Command{
 		default:
 			fmt.Println("patchdock run: (skeleton) would open the TUI with the issue picker and a prompt input line")
 		}
+		return nil
 	},
 }
 
 func runTask(ctx context.Context, prompt string) error {
 	repoAbs, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("failed to get absolute path")
+		return fmt.Errorf("resolve current directory: %w", err)
 	}
 
 	agentsAbs := filepath.Join(repoAbs, ".patchdock")
 	if _, err := os.Stat(agentsAbs); err != nil {
-		return fmt.Errorf("agents dir not found at %s: %w", agentsAbs, err)
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%s is not initialised for patchdock. Run `patchdock init` first", repoAbs)
+		}
+		return fmt.Errorf("check %s: %w", agentsAbs, err)
 	}
 
 	cfg, err := config.Load(filepath.Join(agentsAbs, "config.yml"))
 	if err != nil {
-		return err
+		return fmt.Errorf("%w - edit the file, or regenerate the scaffold with `patchdock init --force` (overwrites your agent files)", err)
 	}
 
 	cli, err := docker.NewClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("connect to docker: %w. Is the Docker daemon running?", err)
 	}
 	defer cli.Close()
 
@@ -74,7 +76,7 @@ func runTask(ctx context.Context, prompt string) error {
 
 	found, err := cli.ImageExists(ctx, AgentName)
 	if err != nil {
-		return fmt.Errorf("failed to check whether image %q exists: %w", AgentName, err)
+		return fmt.Errorf("check image %q: %w. Is the Docker daemon running?", AgentName, err)
 	}
 
 	if !found {
@@ -86,15 +88,14 @@ func runTask(ctx context.Context, prompt string) error {
 	p := pipeline.NewPipeline(cli, cfg, AgentName, repoAbs, agentsAbs)
 	outcome, err := p.Run(ctx, task)
 	if err != nil {
-		return fmt.Errorf("pipeline: %w", err)
+		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, logsFile)
 	}
 
-	out, err := json.Marshal(outcome)
-	if err != nil {
-		return err
+	if !outcome.Accepted {
+		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, logsHint)
 	}
 
-	fmt.Printf("pipeline finished — accepted=%v, attempts=%d\n\n%s\n", outcome.Accepted, outcome.Attempts, out)
+	fmt.Printf("Task %s has finished successfully (attempts: %d)\n", task.ID, outcome.Attempts)
 	return nil
 }
 

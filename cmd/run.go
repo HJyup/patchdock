@@ -92,7 +92,7 @@ func runTask(ctx context.Context, prompt string) error {
 	}
 
 	if !outcome.Accepted {
-		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, logsHint)
+		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, logsFile)
 	}
 
 	fmt.Printf("Task %s has finished successfully (attempts: %d)\n", task.ID, outcome.Attempts)

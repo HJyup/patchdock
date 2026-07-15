@@ -4,51 +4,45 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"time"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
 )
 
 type ReviewerOpts struct {
-	Image     string
-	Dir       string
-	LogWriter io.Writer
-	// WorkspaceDir, when set, is the target repository mounted where we can make any changes
+	Dir string
+	// WorkspaceDir, when set, is the target repository mounted read-only
+	// so the reviewer can inspect the executor's changes without editing them
 	WorkspaceDir string
-	AgentsDir    string
 
-	Timeout     time.Duration
-	MaxTokens   int
 	AgentFile   string
 	Attempt     int
 	MaxAttempts int
 }
 
-func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, exOpts ReviewerOpts) (types.Review, error) {
+func RunReviewer(ctx context.Context, c *docker.Client, input ReviewerInput, revOpts ReviewerOpts, agentOpts AgentOpts) (types.Review, error) {
 	if len(input.ExecutionResults) == 0 {
 		return types.Review{}, fmt.Errorf("reviewer requires at least one execution result")
 	}
 
 	var mounts []docker.Mount
-	if exOpts.WorkspaceDir != "" {
-		mounts = append(mounts, docker.Mount{Source: exOpts.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: true})
+	if revOpts.WorkspaceDir != "" {
+		mounts = append(mounts, docker.Mount{Source: revOpts.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: true})
 	}
 
 	raw, err := runStage(ctx, c, opts{
-		image:       exOpts.Image,
+		image:       agentOpts.Image,
 		stage:       types.StageReviewer,
 		taskID:      input.Plan.TaskID,
-		dir:         exOpts.Dir,
+		dir:         revOpts.Dir,
 		mounts:      mounts,
-		agentsPath:  exOpts.AgentsDir,
-		logger:      exOpts.LogWriter,
-		agentFile:   exOpts.AgentFile,
-		timeout:     exOpts.Timeout,
-		maxTokens:   exOpts.MaxTokens,
-		attempt:     exOpts.Attempt,
-		maxAttempts: exOpts.MaxAttempts,
+		agentsPath:  agentOpts.AgentsDir,
+		logger:      agentOpts.LogWriter,
+		agentFile:   revOpts.AgentFile,
+		timeout:     agentOpts.Timeout,
+		maxTokens:   agentOpts.MaxTokens,
+		attempt:     revOpts.Attempt,
+		maxAttempts: revOpts.MaxAttempts,
 	}, input)
 	if err != nil {
 		return types.Review{}, err

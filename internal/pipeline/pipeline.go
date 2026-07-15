@@ -44,8 +44,8 @@ func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDi
 	}
 }
 
-func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
-	err := p.validateEnv(ctx)
+func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err error) {
+	err = p.validateEnv(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -65,36 +65,31 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 	defer logger.Close()
 
-	out := &Outcome{
+	out = &Outcome{
 		TaskID:   task.ID,
 		Accepted: false,
 	}
 	defer func() {
-		bytes, err := json.MarshalIndent(out, "", "  ")
-		if err != nil {
-			fmt.Println("Failed to marshal", err)
+		if werr := writeOutcome(logger, out); werr != nil {
+			err = werr
 		}
-
-		err = logger.WriteOutcome(bytes)
-		if err != nil {
-			fmt.Println("Failed to write the outcome", err)
-			return
-		}
-
 	}()
 
+	agentsCfg := stage.AgentOpts{
+		Image:     p.image,
+		AgentsDir: p.agentsDir,
+		LogWriter: logger,
+		Timeout:   p.cfg.Container.Timeout.Duration(),
+		MaxTokens: p.cfg.Container.TokenBudget,
+	}
+
 	plan, err := stage.RunPlanner(ctx, p.cli, stage.PlannerInput{Task: task}, stage.PlannerOpts{
-		Image:       p.image,
 		Dir:         env.PlannerPath(),
 		RepoDir:     p.repoDir,
-		AgentsDir:   p.agentsDir,
-		LogWriter:   logger,
-		Timeout:     p.cfg.Container.Timeout.Duration(),
-		MaxTokens:   p.cfg.Container.TokenBudget,
 		AgentFile:   p.cfg.Stages[types.StagePlanner],
 		Attempt:     1,
 		MaxAttempts: 1,
-	})
+	}, agentsCfg)
 	if err != nil {
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
@@ -113,17 +108,12 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			Plan:    plan,
 			Reviews: history.Reviews,
 		}, stage.ExecutorOpts{
-			Image:        p.image,
 			Dir:          env.ExecutorPath(attempt),
 			WorkspaceDir: wks.Dir,
-			AgentsDir:    p.agentsDir,
-			LogWriter:    logger,
-			Timeout:      p.cfg.Container.Timeout.Duration(),
-			MaxTokens:    p.cfg.Container.TokenBudget,
 			AgentFile:    p.cfg.Stages[types.StageExecutor],
 			Attempt:      attempt + 1,
 			MaxAttempts:  p.maxRetries + 1,
-		})
+		}, agentsCfg)
 		if err != nil {
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
@@ -143,17 +133,12 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 			ExecutionResults: history.Executions,
 			PreviousReviews:  history.Reviews,
 		}, stage.ReviewerOpts{
-			Image:        p.image,
 			Dir:          env.ReviewPath(attempt),
 			WorkspaceDir: wks.Dir,
-			AgentsDir:    p.agentsDir,
-			LogWriter:    logger,
-			Timeout:      p.cfg.Container.Timeout.Duration(),
-			MaxTokens:    p.cfg.Container.TokenBudget,
 			AgentFile:    p.cfg.Stages[types.StageReviewer],
 			Attempt:      attempt + 1,
 			MaxAttempts:  p.maxRetries + 1,
-		})
+		}, agentsCfg)
 		if err != nil {
 			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
@@ -165,10 +150,8 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 
 		if rev.Decision == types.ReviewAccept {
 			diffsBytes := []byte(history.Executions[len(history.Executions)-1].Patch)
-			err = logger.WriteDiffs(diffsBytes)
-			if err != nil {
-				fmt.Println("Failed to write bytes", err)
-				return out, err
+			if err := logger.WriteDiffs(diffsBytes); err != nil {
+				return out, fmt.Errorf("write workspace patch: %w", err)
 			}
 
 			out.Accepted = true
@@ -177,6 +160,19 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 
 	return out, nil
+}
+
+func writeOutcome(logger *auditlog.Logger, out *Outcome) error {
+	bytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal outcome: %w", err)
+	}
+
+	if err := logger.WriteOutcome(bytes); err != nil {
+		return fmt.Errorf("write outcome: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Pipeline) validateEnv(ctx context.Context) error {
@@ -190,7 +186,7 @@ func (p *Pipeline) validateEnv(ctx context.Context) error {
 	}
 
 	if !exists {
-		return fmt.Errorf("image %q not found — build it first:\n  docker build -t %s sdk/", p.image, p.image)
+		return fmt.Errorf("image %q not found — build it first", p.image)
 	}
 
 	return nil

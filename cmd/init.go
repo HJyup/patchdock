@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -13,7 +14,7 @@ var initForce bool
 var initCmd = &cobra.Command{
 	Use:   "init [repo-dir]",
 	Short: "Scaffold .patchdock/ in the current repository",
-	Long: `Creates the .patchdock/ directory with everything a repo needs. 
+	Long: `Creates the .patchdock/ directory with everything a repo needs.
 		The generated agents work out of the box, so "patchdock init" followed
 		by "patchdock run" succeeds before you have written a single line.
 		If .patchdock/ already exists the command refuses to touch it; pass
@@ -26,6 +27,9 @@ var initCmd = &cobra.Command{
 		}
 
 		if err := scaffold.Init(scaffold.Options{RepoDir: repoDir, Force: initForce}); err != nil {
+			if errors.Is(err, scaffold.ErrAlreadyExists) {
+				return fmt.Errorf("%s already has .patchdock. Rerun with --force to regenerate it (overwrites config.yml and your agent files)", repoDir)
+			}
 			return err
 		}
 

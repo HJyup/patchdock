@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 
 	dockerBuild "github.com/docker/docker/api/types/build"
 	"github.com/docker/docker/client"
@@ -33,7 +34,7 @@ func build(ctx context.Context, cli *client.Client, spec BuildSpec) (<-chan LogL
 		defer close(logs)
 		defer close(result)
 
-		tarCxt, err := tarDir(spec.ContextDir)
+		tarCxt, err := tarDir(spec.ContextDir, spec.Exclude)
 		if err != nil {
 			result <- BuildResult{Err: fmt.Errorf("failed to tar a folder: %w", err)}
 			return
@@ -43,9 +44,6 @@ func build(ctx context.Context, cli *client.Client, spec BuildSpec) (<-chan LogL
 		opts := dockerBuild.ImageBuildOptions{ForceRemove: true}
 		if spec.Tag != "" {
 			opts.Tags = []string{spec.Tag}
-		}
-		if spec.Dockerfile != "" {
-			opts.Dockerfile = spec.Dockerfile
 		}
 		img, err := cli.ImageBuild(ctx, tarCxt, opts)
 
@@ -113,7 +111,7 @@ func streamBuildLogs(body io.Reader) (<-chan string, <-chan BuildResult) {
 	return logs, result
 }
 
-func tarDir(srcPath string) (io.ReadCloser, error) {
+func tarDir(srcPath string, exclude []string) (io.ReadCloser, error) {
 	pr, pw := io.Pipe()
 
 	go func() {
@@ -122,6 +120,17 @@ func tarDir(srcPath string) (io.ReadCloser, error) {
 		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
+			}
+
+			if slices.Contains(exclude, info.Name()) {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+
+			if !info.IsDir() && !info.Mode().IsRegular() {
+				return nil
 			}
 
 			header, err := tar.FileInfoHeader(info, "")

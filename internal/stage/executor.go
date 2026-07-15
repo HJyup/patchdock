@@ -3,45 +3,38 @@ package stage
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"time"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
 )
 
 type ExecutorOpts struct {
-	Image     string
-	Dir       string
-	LogWriter io.Writer
+	Dir string
 	// WorkspaceDir, when set, is the target repository mounted where we can make any changes
 	WorkspaceDir string
-	AgentsDir    string
 
-	Timeout     time.Duration
-	MaxTokens   int
 	AgentFile   string
 	Attempt     int
 	MaxAttempts int
 }
 
-func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exOpts ExecutorOpts) (types.ExecutionResult, error) {
+func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exOpts ExecutorOpts, agentOpts AgentOpts) (types.ExecutionResult, error) {
 	var mounts []docker.Mount
 	if exOpts.WorkspaceDir != "" {
 		mounts = append(mounts, docker.Mount{Source: exOpts.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: false})
 	}
 
 	raw, err := runStage(ctx, c, opts{
-		image:       exOpts.Image,
+		image:       agentOpts.Image,
 		stage:       types.StageExecutor,
 		taskID:      input.Plan.TaskID,
 		dir:         exOpts.Dir,
 		mounts:      mounts,
-		agentsPath:  exOpts.AgentsDir,
-		logger:      exOpts.LogWriter,
+		agentsPath:  agentOpts.AgentsDir,
+		logger:      agentOpts.LogWriter,
 		agentFile:   exOpts.AgentFile,
-		timeout:     exOpts.Timeout,
-		maxTokens:   exOpts.MaxTokens,
+		timeout:     agentOpts.Timeout,
+		maxTokens:   agentOpts.MaxTokens,
 		attempt:     exOpts.Attempt,
 		maxAttempts: exOpts.MaxAttempts,
 	}, input)

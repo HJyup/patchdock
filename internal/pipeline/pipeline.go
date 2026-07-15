@@ -69,19 +69,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 		TaskID:   task.ID,
 		Accepted: false,
 	}
-	defer func() {
-		bytes, err := json.MarshalIndent(out, "", "  ")
-		if err != nil {
-			fmt.Println("Failed to marshal", err)
-		}
-
-		err = logger.WriteOutcome(bytes)
-		if err != nil {
-			fmt.Println("Failed to write the outcome", err)
-			return
-		}
-
-	}()
+	defer writeOutcome(logger, out)
 
 	plan, err := stage.RunPlanner(ctx, p.cli, stage.PlannerInput{Task: task}, stage.PlannerOpts{
 		Image:       p.image,
@@ -165,10 +153,8 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 
 		if rev.Decision == types.ReviewAccept {
 			diffsBytes := []byte(history.Executions[len(history.Executions)-1].Patch)
-			err = logger.WriteDiffs(diffsBytes)
-			if err != nil {
-				fmt.Println("Failed to write bytes", err)
-				return out, err
+			if err := logger.WriteDiffs(diffsBytes); err != nil {
+				return out, fmt.Errorf("write workspace patch: %w", err)
 			}
 
 			out.Accepted = true
@@ -177,6 +163,20 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (*Outcome, error) {
 	}
 
 	return out, nil
+}
+
+// writeOutcome TODO: fix how to make errors returnable
+func writeOutcome(logger *auditlog.Logger, out *Outcome) error {
+	bytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal outcome: %w", err)
+	}
+
+	if err := logger.WriteOutcome(bytes); err != nil {
+		return fmt.Errorf("write outcome: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Pipeline) validateEnv(ctx context.Context) error {
@@ -190,7 +190,7 @@ func (p *Pipeline) validateEnv(ctx context.Context) error {
 	}
 
 	if !exists {
-		return fmt.Errorf("image %q not found — build it first:\n  docker build -t %s sdk/", p.image, p.image)
+		return fmt.Errorf("image %q not found — build it first", p.image)
 	}
 
 	return nil

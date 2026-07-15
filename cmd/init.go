@@ -13,7 +13,7 @@ var initForce bool
 var initCmd = &cobra.Command{
 	Use:   "init [repo-dir]",
 	Short: "Scaffold .patchdock/ in the current repository",
-	Long: `Creates the .patchdock/ directory with everything a repo needs. 
+	Long: `Creates the .patchdock/ directory with everything a repo needs.
 		The generated agents work out of the box, so "patchdock init" followed
 		by "patchdock run" succeeds before you have written a single line.
 		If .patchdock/ already exists the command refuses to touch it; pass

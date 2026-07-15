@@ -47,7 +47,7 @@ func gitClone(repoDir, dstDir string) error {
 	cmd.Stderr = &errBuf
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("stdout/stderr: %s (%v)", errBuf.String(), err)
+		return gitCommandError("git clone", err, errBuf.String())
 	}
 	return nil
 }
@@ -72,7 +72,7 @@ func gitDiff(ctx context.Context, dir, baseCommit string) (string, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("git diff against %s failed: %v, stderr: %s", baseCommit, err, stderr.String())
+		return "", gitCommandError(fmt.Sprintf("git diff against %s", baseCommit), err, stderr.String())
 	}
 
 	return stdout.String(), nil
@@ -86,7 +86,16 @@ func gitAddAll(ctx context.Context, dir string) error {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git add failed: %v, stderr: %s", err, stderr.String())
+		return gitCommandError("git add", err, stderr.String())
 	}
 	return nil
+}
+
+func gitCommandError(operation string, err error, stderr string) error {
+	stderr = strings.TrimSpace(stderr)
+	if stderr == "" {
+		return fmt.Errorf("%s: %w", operation, err)
+	}
+
+	return fmt.Errorf("%s: %w: %s", operation, err, stderr)
 }

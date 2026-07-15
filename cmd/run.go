@@ -14,8 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultAgentImage = "patchdock-agent:dev"
-const defaultAgentPath = "project-demo"
+const AgentName = "patchdock-agent:dev"
 
 var (
 	runIssues []int
@@ -47,10 +46,11 @@ var runCmd = &cobra.Command{
 }
 
 func runTask(ctx context.Context, prompt string) error {
-	repoAbs, err := filepath.Abs(defaultAgentPath)
+	repoAbs, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("resolve repo dir: %w", err)
+		return fmt.Errorf("failed to get absolute path")
 	}
+
 	agentsAbs := filepath.Join(repoAbs, ".patchdock")
 	if _, err := os.Stat(agentsAbs); err != nil {
 		return fmt.Errorf("agents dir not found at %s: %w", agentsAbs, err)
@@ -72,7 +72,18 @@ func runTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("invalid task: %w", err)
 	}
 
-	p := pipeline.NewPipeline(cli, cfg, defaultAgentImage, repoAbs, agentsAbs)
+	found, err := cli.ImageExists(ctx, AgentName)
+	if err != nil {
+		return fmt.Errorf("failed to check whether image %q exists: %w", AgentName, err)
+	}
+
+	if !found {
+		if err := buildImage(ctx, cli, AgentName, repoAbs); err != nil {
+			return err
+		}
+	}
+
+	p := pipeline.NewPipeline(cli, cfg, AgentName, repoAbs, agentsAbs)
 	outcome, err := p.Run(ctx, task)
 	if err != nil {
 		return fmt.Errorf("pipeline: %w", err)
@@ -84,6 +95,31 @@ func runTask(ctx context.Context, prompt string) error {
 	}
 
 	fmt.Printf("pipeline finished — accepted=%v, attempts=%d\n\n%s\n", outcome.Accepted, outcome.Attempts, out)
+	return nil
+}
+
+func buildImage(ctx context.Context, cli *docker.Client, image, repoDir string) error {
+	sdkDir := filepath.Join(repoDir, "sdk")
+	if _, err := os.Stat(filepath.Join(sdkDir, "Dockerfile")); err != nil {
+		return fmt.Errorf("image %q not found and this repo has no recipe for it — build it from a patchdock checkout:\n  docker build -t %s <patchdock>/sdk", image, image)
+	}
+
+	fmt.Printf("image %q not found — building from %s (first run only)\n", image, sdkDir)
+
+	logs, result := cli.Build(ctx, docker.BuildSpec{
+		ContextDir: sdkDir,
+		Tag:        image,
+		Exclude:    []string{"node_modules"},
+	})
+	for line := range logs {
+		fmt.Print(line.Text)
+	}
+
+	if res := <-result; res.Err != nil {
+		return fmt.Errorf("failed to build image %q: %w", image, res.Err)
+	}
+
+	fmt.Printf("image %q ready\n\n", image)
 	return nil
 }
 

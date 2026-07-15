@@ -10,7 +10,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "patchdock",
 	Short: "A typed agent-pipeline runtime: plan, execute, review — in Docker",
-	Long: `Patchdock drives a fixed pipeline against a code repository. 
+	Long: `Patchdock drives a fixed pipeline against a code repository.
 		Run without arguments to open the TUI: pick GitHub issues or enter a
 		prompt, watch concurrent tasks move through the pipeline, inspect
 		plans and diffs, and gate pull requests.`,

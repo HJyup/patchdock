@@ -14,8 +14,8 @@ import (
 // daemon, name the result Tag.
 type BuildSpec struct {
 	ContextDir string
-	Dockerfile string
 	Tag        string
+	Exclude    []string
 }
 
 // BuildResult is the terminal outcome of a Build.

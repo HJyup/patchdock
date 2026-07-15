@@ -10,11 +10,6 @@ const taskSchema = z.object({
   labels: z.array(z.string()).optional(),
 });
 
-// Agent-authored payloads are deliberately loose: a short summary the
-// runtime displays, plus one markdown field the next stage reads. Structure
-// inside the prose (steps, issue lists, severities) is a prompt convention —
-// only fields the runtime branches on or displays are typed strictly.
-
 export const planDataSchema = z.object({
   summary: z.string().min(1),
   body: z.string().min(1),
@@ -44,14 +39,11 @@ const reviewFields = z.object({
   feedback: z.string().optional(),
 });
 
-// A reject must carry feedback so a retry never flies blind.
 export const reviewDataSchema = reviewFields.refine(
   (r) => r.decision !== "reject" || (r.feedback ?? "").length > 0,
   { message: "feedback is required when decision is reject", path: ["feedback"] },
 );
 
-// Host-stitched reviews were already validated on the host, so inputs reuse
-// the plain field shape without re-running the cross-field rule.
 const reviewSchema = reviewFields.extend({
   id: z.string().min(1),
   task_id: z.string().min(1),

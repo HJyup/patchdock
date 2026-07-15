@@ -12,8 +12,6 @@ import (
 
 var requiredStages = []types.StageName{types.StagePlanner, types.StageExecutor, types.StageReviewer}
 
-// Validate reports every problem as "path: problem" lines so a user can fix
-// the whole file in one pass.
 func (c *Config) Validate() error {
 	var errs []error
 	addf := func(format string, args ...any) {

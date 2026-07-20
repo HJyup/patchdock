@@ -1,7 +1,10 @@
 FROM node:22-slim
 
-# tsx runs TypeScript directly (both the harness and the user's agent files)
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN npm install -g tsx@4
+RUN npm install -g @openai/codex@0.142.4
 WORKDIR /opt/patchdock/sdk
 
 COPY package.json pnpm-lock.yaml ./

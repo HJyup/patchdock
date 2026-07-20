@@ -30,6 +30,15 @@ func (c *Config) Validate() error {
 	if c.Retries.Max < 0 {
 		addf("config.retries.max: must be >= 0")
 	}
+	if c.Codex != nil {
+		switch c.Codex.Auth {
+		case "":
+			addf("config.codex.auth: missing")
+		case CodexHostLogin:
+		default:
+			addf("config.codex.auth: unsupported value %q", c.Codex.Auth)
+		}
+	}
 
 	for _, stage := range requiredStages {
 		file, ok := c.Stages[stage]

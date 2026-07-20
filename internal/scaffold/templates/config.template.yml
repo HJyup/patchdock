@@ -19,7 +19,12 @@ container:
 retries:
   max: 1
 
-# Which filepath drives each stage
+# Optional Codex configuration. Uncomment when an agent file uses the built-in
+# Codex adapter. host-login reuses the local `codex login` subscription session.
+# codex:
+#   auth: host-login
+
+# Which filepath drives each stage.
 stages:
   planner: planner.ts
   executor: executor.ts

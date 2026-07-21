@@ -8,36 +8,33 @@ import (
 	"github.com/HJyup/patchdock/internal/types"
 )
 
-type ExecutorOpts struct {
-	Dir string
-	// WorkspaceDir, when set, is the target repository mounted where we can make any changes
-	WorkspaceDir string
-
-	AgentFile   string
-	Attempt     int
-	MaxAttempts int
+type ExecutorInput struct {
+	Plan    types.Plan     `json:"plan"`
+	Reviews []types.Review `json:"reviews"`
 }
 
-func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exOpts ExecutorOpts, agentOpts AgentOpts) (types.ExecutionResult, error) {
+type ExecutorRequest struct {
+	Spec         StageSpec
+	Input        ExecutorInput
+	ExchangeDir  string
+	WorkspaceDir string
+	Attempt      Attempt
+}
+
+func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.ExecutionResult, error) {
 	var mounts []docker.Mount
-	if exOpts.WorkspaceDir != "" {
-		mounts = append(mounts, docker.Mount{Source: exOpts.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: false})
+	if req.WorkspaceDir != "" {
+		mounts = append(mounts, docker.Mount{Source: req.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: false})
 	}
 
-	raw, err := runStage(ctx, c, opts{
-		image:       agentOpts.Image,
+	raw, err := r.runStage(ctx, req.Spec, runOptions{
 		stage:       types.StageExecutor,
-		taskID:      input.Plan.TaskID,
-		dir:         exOpts.Dir,
+		taskID:      req.Input.Plan.TaskID,
+		dir:         req.ExchangeDir,
 		mounts:      mounts,
-		agentsPath:  agentOpts.AgentsDir,
-		logger:      agentOpts.LogWriter,
-		agentFile:   exOpts.AgentFile,
-		timeout:     agentOpts.Timeout,
-		maxTokens:   agentOpts.MaxTokens,
-		attempt:     exOpts.Attempt,
-		maxAttempts: exOpts.MaxAttempts,
-	}, input)
+		attempt:     req.Attempt.Number,
+		maxAttempts: req.Attempt.Maximum,
+	}, req.Input)
 	if err != nil {
 		return types.ExecutionResult{}, err
 	}
@@ -47,8 +44,8 @@ func RunExecutor(ctx context.Context, c *docker.Client, input ExecutorInput, exO
 		return types.ExecutionResult{}, ErrOutputNotJSON{Err: err}
 	}
 
-	ex.TaskID = input.Plan.TaskID
-	ex.PlanID = input.Plan.ID
+	ex.TaskID = req.Input.Plan.TaskID
+	ex.PlanID = req.Input.Plan.ID
 
 	res, err := types.NewExecutionResult(ex)
 	if err != nil {

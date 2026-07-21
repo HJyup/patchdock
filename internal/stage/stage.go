@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/HJyup/patchdock/internal/auth"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
 )
@@ -25,22 +25,16 @@ const (
 	WorkspaceTarget = "/workspace"
 )
 
-type opts struct {
-	image       string
+type runOptions struct {
 	stage       types.StageName
 	taskID      string
 	dir         string
 	mounts      []docker.Mount
-	agentsPath  string
-	logger      io.Writer
-	agentFile   string
-	timeout     time.Duration
-	maxTokens   int
 	attempt     int
 	maxAttempts int
 }
 
-func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]byte, error) {
+func (r *Runner) runStage(ctx context.Context, spec StageSpec, op runOptions, inputCnt any) ([]byte, error) {
 	if err := os.Mkdir(op.dir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create exchange dir: %w", err)
 	}
@@ -55,12 +49,12 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 	// the /repo mount: a stage may run without a repo, so agents can't depend
 	// on it being present.
 	agentMount := docker.Mount{
-		Source:   op.agentsPath,
+		Source:   r.options.AgentsDir,
 		Target:   AgentsTarget,
 		ReadOnly: true,
 	}
 
-	mounts := make([]docker.Mount, 0, len(op.mounts)+2)
+	mounts := make([]docker.Mount, 0, len(op.mounts)+3)
 	for _, mount := range op.mounts {
 		if mount.Target == IOTarget {
 			return nil, fmt.Errorf("mount target %v is reserved for the exchange dir", IOTarget)
@@ -72,7 +66,6 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 	}
 	mounts = append(mounts, ioMount)
 	mounts = append(mounts, agentMount)
-
 	byteSlice, err := json.MarshalIndent(inputCnt, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode input: %w", err)
@@ -84,29 +77,66 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 		return nil, fmt.Errorf("failed to write %s: %w", Input, err)
 	}
 
-	env := getEnv(op)
+	env := getEnv(op, spec)
+	mounts, err = addCredentials(r.options.Credentials, mounts, env)
+	if err != nil {
+		return nil, err
+	}
 
-	logs, runRes := c.Run(ctx, docker.RunSpec{
-		Image:      op.image,
+	logs, runRes := r.containers.Run(ctx, docker.RunSpec{
+		Image:      r.options.Image,
 		Mounts:     mounts,
 		Env:        env,
 		Labels:     map[string]string{"patchdock.task-id": op.taskID},
 		Entrypoint: nil,
-		Timeout:    op.timeout,
+		Timeout:    spec.Limits.Timeout,
 	})
 
-	logWriter := op.logger
+	logWriter := r.options.LogWriter
 	if logWriter == nil {
 		logWriter = io.Discard
 	}
-	fmt.Fprintf(logWriter, "\n%s LOGS\n", strings.ToUpper(string(op.stage)))
+	if err := writeLogEvent(logWriter, map[string]any{
+		"source": "patchdock",
+		"event":  "stage_started",
+		"stage":  op.stage,
+	}); err != nil {
+		return nil, fmt.Errorf("stage: failed writing to log stream: %w", err)
+	}
 	for msg := range logs {
-		if _, err := fmt.Fprintln(logWriter, msg.Text); err != nil {
+		event := make(map[string]any)
+		if err := json.Unmarshal([]byte(msg.Text), &event); err != nil {
+			event = map[string]any{
+				"source":  "container",
+				"event":   "message",
+				"message": msg.Text,
+			}
+		}
+		event["stage"] = op.stage
+		event["stream"] = msg.Stream
+		if err := writeLogEvent(logWriter, event); err != nil {
 			return nil, fmt.Errorf("stage: failed writing to log stream: %w", err)
 		}
 	}
 
 	res := <-runRes
+	terminalEvent := map[string]any{
+		"source":    "patchdock",
+		"event":     "stage_finished",
+		"stage":     op.stage,
+		"exit_code": res.ExitCode,
+	}
+	if res.Err != nil {
+		terminalEvent["level"] = "error"
+		terminalEvent["error"] = res.Err.Error()
+	} else if res.ExitCode != 0 {
+		terminalEvent["level"] = "error"
+	} else {
+		terminalEvent["level"] = "info"
+	}
+	if err := writeLogEvent(logWriter, terminalEvent); err != nil {
+		return nil, fmt.Errorf("stage: failed writing to log stream: %w", err)
+	}
 	if res.Err != nil {
 		return nil, fmt.Errorf("container run failed: %w", res.Err)
 	}
@@ -126,16 +156,30 @@ func runStage(ctx context.Context, c *docker.Client, op opts, inputCnt any) ([]b
 	return content, nil
 }
 
-func getEnv(op opts) map[string]string {
+func writeLogEvent(w io.Writer, event map[string]any) error {
+	if _, exists := event["timestamp"]; !exists {
+		event["timestamp"] = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	line, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("encode structured log event: %w", err)
+	}
+	if _, err := fmt.Fprintln(w, string(line)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func getEnv(op runOptions, spec StageSpec) map[string]string {
 	env := map[string]string{
 		"PATCHDOCK_STAGE":   string(op.stage),
 		"PATCHDOCK_TASK_ID": op.taskID,
 	}
-	if op.agentFile != "" {
-		env["PATCHDOCK_AGENT_FILE"] = op.agentFile
+	if spec.AgentFile != "" {
+		env["PATCHDOCK_AGENT_FILE"] = spec.AgentFile
 	}
-	if op.maxTokens > 0 {
-		env["PATCHDOCK_TOKEN_BUDGET"] = strconv.Itoa(op.maxTokens)
+	if spec.Limits.MaxTokens > 0 {
+		env["PATCHDOCK_TOKEN_BUDGET"] = strconv.Itoa(spec.Limits.MaxTokens)
 	}
 	if op.attempt > 0 {
 		env["PATCHDOCK_ATTEMPT"] = strconv.Itoa(op.attempt)
@@ -145,4 +189,28 @@ func getEnv(op opts) map[string]string {
 	}
 
 	return env
+}
+
+func addCredentials(credentials auth.Credentials, mounts []docker.Mount, env map[string]string) ([]docker.Mount, error) {
+	if len(credentials.Env) == 0 && len(credentials.Mounts) == 0 {
+		return mounts, nil
+	}
+	for key, value := range credentials.Env {
+		if _, reserved := env[key]; reserved {
+			return nil, fmt.Errorf("credential environment variable %q conflicts with stage environment", key)
+		}
+		env[key] = value
+	}
+	existingTargets := make(map[string]struct{}, len(mounts))
+	for _, mount := range mounts {
+		existingTargets[mount.Target] = struct{}{}
+	}
+	for _, mount := range credentials.Mounts {
+		if _, reserved := existingTargets[mount.Target]; reserved {
+			return nil, fmt.Errorf("credential mount target %q conflicts with stage mount", mount.Target)
+		}
+		existingTargets[mount.Target] = struct{}{}
+	}
+
+	return append(mounts, credentials.Mounts...), nil
 }

@@ -49,19 +49,6 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func (l *Logger) WriteOutcome(outcome []byte) error {
-	if l.logDir == "" {
-		return fmt.Errorf("cannot write outcome: log directory is not initialized")
-	}
-
-	outputPath := filepath.Join(l.logDir, "outcome.json")
-	if err := os.WriteFile(outputPath, outcome, 0o644); err != nil {
-		return fmt.Errorf("failed to write outcome.json: %w", err)
-	}
-
-	return nil
-}
-
 func (l *Logger) WriteDiffs(diffs []byte) error {
 	if l.logDir == "" {
 		return fmt.Errorf("cannot write patch: log directory is not initialized")

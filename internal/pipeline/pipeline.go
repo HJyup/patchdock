@@ -2,12 +2,14 @@ package pipeline
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"path/filepath"
 	"time"
 
 	"github.com/HJyup/patchdock/internal/auditlog"
+	"github.com/HJyup/patchdock/internal/auth"
 	"github.com/HJyup/patchdock/internal/config"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/stage"
@@ -69,27 +71,18 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		TaskID:   task.ID,
 		Accepted: false,
 	}
-	defer func() {
-		if werr := writeOutcome(logger, out); werr != nil {
-			err = werr
-		}
-	}()
 
-	agentsCfg := stage.AgentOpts{
-		Image:     p.image,
-		AgentsDir: p.agentsDir,
-		LogWriter: logger,
-		Timeout:   p.cfg.Container.Timeout.Duration(),
-		MaxTokens: p.cfg.Container.TokenBudget,
+	stages, err := p.newStageRunner(logger)
+	if err != nil {
+		return out, fmt.Errorf("load Codex credentials: %w", err)
 	}
 
-	plan, err := stage.RunPlanner(ctx, p.cli, stage.PlannerInput{Task: task}, stage.PlannerOpts{
-		Dir:         env.PlannerPath(),
+	plan, err := stages.RunPlanner(ctx, stage.PlannerRequest{
+		Spec:        p.stageSpec(p.cfg.Stages[types.StagePlanner]),
+		Input:       stage.PlannerInput{Task: task},
+		ExchangeDir: env.PlannerPath(),
 		RepoDir:     p.repoDir,
-		AgentFile:   p.cfg.Stages[types.StagePlanner],
-		Attempt:     1,
-		MaxAttempts: 1,
-	}, agentsCfg)
+	})
 	if err != nil {
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
@@ -104,16 +97,16 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 
 	for attempt := 0; attempt <= p.maxRetries; attempt++ {
-		res, err := stage.RunExecutor(ctx, p.cli, stage.ExecutorInput{
-			Plan:    plan,
-			Reviews: history.Reviews,
-		}, stage.ExecutorOpts{
-			Dir:          env.ExecutorPath(attempt),
+		res, err := stages.RunExecutor(ctx, stage.ExecutorRequest{
+			Spec: p.stageSpec(p.cfg.Stages[types.StageExecutor]),
+			Input: stage.ExecutorInput{
+				Plan:    plan,
+				Reviews: history.Reviews,
+			},
+			ExchangeDir:  env.ExecutorPath(attempt),
 			WorkspaceDir: wks.Dir,
-			AgentFile:    p.cfg.Stages[types.StageExecutor],
-			Attempt:      attempt + 1,
-			MaxAttempts:  p.maxRetries + 1,
-		}, agentsCfg)
+			Attempt:      stage.Attempt{Number: attempt + 1, Maximum: p.maxAttempts()},
+		})
 		if err != nil {
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
@@ -128,17 +121,17 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		history.AddExecution(res)
 		out.Execution = res
 
-		rev, err := stage.RunReviewer(ctx, p.cli, stage.ReviewerInput{
-			Plan:             plan,
-			ExecutionResults: history.Executions,
-			PreviousReviews:  history.Reviews,
-		}, stage.ReviewerOpts{
-			Dir:          env.ReviewPath(attempt),
+		rev, err := stages.RunReviewer(ctx, stage.ReviewerRequest{
+			Spec: p.stageSpec(p.cfg.Stages[types.StageReviewer]),
+			Input: stage.ReviewerInput{
+				Plan:             plan,
+				ExecutionResults: history.Executions,
+				PreviousReviews:  history.Reviews,
+			},
+			ExchangeDir:  env.ReviewPath(attempt),
 			WorkspaceDir: wks.Dir,
-			AgentFile:    p.cfg.Stages[types.StageReviewer],
-			Attempt:      attempt + 1,
-			MaxAttempts:  p.maxRetries + 1,
-		}, agentsCfg)
+			Attempt:      stage.Attempt{Number: attempt + 1, Maximum: p.maxAttempts()},
+		})
 		if err != nil {
 			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
@@ -162,22 +155,44 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	return out, nil
 }
 
-func writeOutcome(logger *auditlog.Logger, out *Outcome) error {
-	bytes, err := json.MarshalIndent(out, "", "  ")
+func (p *Pipeline) newStageRunner(logWriter io.Writer) (*stage.Runner, error) {
+	credentials, err := auth.LoadCodex(p.cfg.Codex)
 	if err != nil {
-		return fmt.Errorf("marshal outcome: %w", err)
+		return nil, err
 	}
 
-	if err := logger.WriteOutcome(bytes); err != nil {
-		return fmt.Errorf("write outcome: %w", err)
-	}
+	return stage.NewRunner(p.cli, stage.RunnerOptions{
+		Image:       p.image,
+		AgentsDir:   p.agentsDir,
+		LogWriter:   logWriter,
+		Credentials: credentials,
+	}), nil
+}
 
-	return nil
+func (p *Pipeline) stageSpec(agentFile string) stage.StageSpec {
+	return stage.StageSpec{
+		AgentFile: agentFile,
+		Limits: stage.Limits{
+			Timeout:   p.cfg.Container.Timeout.Duration(),
+			MaxTokens: p.cfg.Container.TokenBudget,
+		},
+	}
+}
+
+func (p *Pipeline) maxAttempts() int {
+	if p.maxRetries == math.MaxInt {
+		return 0
+	}
+	return p.maxRetries + 1
 }
 
 func (p *Pipeline) validateEnv(ctx context.Context) error {
 	if p.maxRetries < 0 {
 		return fmt.Errorf("maximum amount of retries is incorrect: %v", p.maxRetries)
+	}
+
+	if p.maxRetries == 0 {
+		p.maxRetries = math.MaxInt
 	}
 
 	exists, err := p.cli.ImageExists(ctx, p.image)

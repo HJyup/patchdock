@@ -8,37 +8,32 @@ import (
 	"github.com/HJyup/patchdock/internal/types"
 )
 
-type PlannerOpts struct {
-	Dir string
-	// RepoDir, when set, is the target repository mounted read-only at /repo
-	// so the planner can explore the code it plans against.
-	RepoDir string
-
-	AgentFile   string
-	Attempt     int
-	MaxAttempts int
+type PlannerInput struct {
+	Task types.Task `json:"task"`
 }
 
-func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpts PlannerOpts, agentOpts AgentOpts) (types.Plan, error) {
+type PlannerRequest struct {
+	Spec        StageSpec
+	Input       PlannerInput
+	ExchangeDir string
+	RepoDir     string
+	Attempt     Attempt
+}
+
+func (r *Runner) RunPlanner(ctx context.Context, req PlannerRequest) (types.Plan, error) {
 	var mounts []docker.Mount
-	if plOpts.RepoDir != "" {
-		mounts = append(mounts, docker.Mount{Source: plOpts.RepoDir, Target: RepoTarget, ReadOnly: true})
+	if req.RepoDir != "" {
+		mounts = append(mounts, docker.Mount{Source: req.RepoDir, Target: RepoTarget, ReadOnly: true})
 	}
 
-	raw, err := runStage(ctx, c, opts{
-		image:       agentOpts.Image,
+	raw, err := r.runStage(ctx, req.Spec, runOptions{
 		stage:       types.StagePlanner,
-		taskID:      input.Task.ID,
-		dir:         plOpts.Dir,
+		taskID:      req.Input.Task.ID,
+		dir:         req.ExchangeDir,
 		mounts:      mounts,
-		agentsPath:  agentOpts.AgentsDir,
-		logger:      agentOpts.LogWriter,
-		agentFile:   plOpts.AgentFile,
-		timeout:     agentOpts.Timeout,
-		maxTokens:   agentOpts.MaxTokens,
-		attempt:     plOpts.Attempt,
-		maxAttempts: plOpts.MaxAttempts,
-	}, input)
+		attempt:     req.Attempt.Number,
+		maxAttempts: req.Attempt.Maximum,
+	}, req.Input)
 	if err != nil {
 		return types.Plan{}, err
 	}
@@ -48,7 +43,7 @@ func RunPlanner(ctx context.Context, c *docker.Client, input PlannerInput, plOpt
 		return types.Plan{}, ErrOutputNotJSON{Err: err}
 	}
 
-	p.TaskID = input.Task.ID
+	p.TaskID = req.Input.Task.ID
 	plan, err := types.NewPlan(p)
 	if err != nil {
 		return types.Plan{}, ErrContractInvalid{Err: err}

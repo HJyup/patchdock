@@ -1,14 +1,7 @@
-import { defineExecutor } from "@patchdock/sdk";
+import { codex, defineExecutor } from "@patchdock/sdk";
 
 export default defineExecutor({
   async run(ctx, input) {
-    ctx.log(`Executing plan: ${input.plan.summary}`);
-
-    // A real executor edits files under ctx.paths.workspace; Patchdock
-    // extracts the resulting git diff as the authoritative patch.
-    return {
-      status: "success",
-      notes: "Default scaffold executor did not modify files.",
-    };
+    return codex(ctx, input);
   },
 });

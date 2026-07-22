@@ -1,24 +1,7 @@
-import { definePlanner } from "@patchdock/sdk";
+import { codex, definePlanner } from "@patchdock/sdk";
 
 export default definePlanner({
   async run(ctx, input) {
-    ctx.log(`Planning task: ${input.task.description}`);
-
-    // The body is markdown for the executor and reviewer to read. The
-    // Approach / Steps / Acceptance criteria headings are a convention,
-    // not a schema — keep them so downstream stages know where to look.
-    return {
-      summary: "Create a small, focused change that satisfies the task.",
-      body: [
-        "## Approach",
-        "Make the smallest change that satisfies the task.",
-        "",
-        "## Steps",
-        `1. ${input.task.description}`,
-        "",
-        "## Acceptance criteria",
-        "- The requested behavior is implemented and easy to review.",
-      ].join("\n"),
-    };
+    return codex(ctx, input);
   },
 });

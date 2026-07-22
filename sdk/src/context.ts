@@ -3,6 +3,14 @@ import { z } from "zod";
 export const StageSchema = z.enum(["planner", "executor", "reviewer"]);
 export type Stage = z.infer<typeof StageSchema>;
 
+export interface StageLogEvent {
+  source: string;
+  event: string;
+  level?: "debug" | "info" | "warn" | "error";
+  message?: string;
+  [field: string]: unknown;
+}
+
 // Mount paths handed to the agent:
 //   Planner  - repo
 //   Executor - workspace
@@ -24,7 +32,7 @@ interface StageContextData {
 }
 
 export interface StageContext extends StageContextData {
-  log: (msg: string) => void;
+  log: (entry: string | StageLogEvent) => void;
 }
 
 export function parseTokenBudget(budget: string | undefined): Nullable<number> {

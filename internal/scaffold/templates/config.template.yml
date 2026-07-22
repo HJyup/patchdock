@@ -19,10 +19,10 @@ container:
 retries:
   max: 1
 
-# Optional Codex configuration. Uncomment when an agent file uses the built-in
-# Codex adapter. host-login reuses the local `codex login` subscription session.
-# codex:
-#   auth: host-login
+# The generated agents use Codex. host-login reuses the local `codex login`
+# subscription session inside each stage container.
+codex:
+  auth: host-login
 
 # Which filepath drives each stage.
 stages:

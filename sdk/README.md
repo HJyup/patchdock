@@ -19,7 +19,7 @@ but its output must satisfy the stage contract so the next pipeline stage can co
 Install the SDK directly in a TypeScript project:
 
 ```bash
-pnpm i patchdock-sdk
+pnpm add @patchdock/sdk
 ```
 
 Or initialize a repository from the main Patchdock instance:
@@ -41,18 +41,20 @@ Patchdock has three stage definitions:
 - `defineReviewer`
 
 Every configured agent file must default-export the matching definition. The examples
-below show the intended built-in Codex adapter. Codex support is currently in development.
+below use the built-in Codex adapter while keeping the context and typed input available
+for project-specific logic.
 
 ### `definePlanner`
 
 The planner receives a task and produces the plan that drives the rest of the pipeline.
 
 ```typescript
-import { definePlanner } from "patchdock-sdk";
-import { codex } from "patchdock-sdk/agents/codex";
+import { codex, definePlanner } from "@patchdock/sdk";
 
 export default definePlanner({
-  run: (ctx, input) => codex(ctx, input),
+  async run(ctx, input) {
+    return codex(ctx, input);
+  },
 });
 ```
 
@@ -83,11 +85,12 @@ The executor receives the plan and previous review feedback, then works in the w
 workspace.
 
 ```typescript
-import { defineExecutor } from "patchdock-sdk";
-import { codex } from "patchdock-sdk/agents/codex";
+import { codex, defineExecutor } from "@patchdock/sdk";
 
 export default defineExecutor({
-  run: (ctx, input) => codex(ctx, input),
+  async run(ctx, input) {
+    return codex(ctx, input);
+  },
 });
 ```
 
@@ -119,11 +122,12 @@ The reviewer receives the plan and execution history, then returns an accept or 
 decision.
 
 ```typescript
-import { defineReviewer } from "patchdock-sdk";
-import { codex } from "patchdock-sdk/agents/codex";
+import { codex, defineReviewer } from "@patchdock/sdk";
 
 export default defineReviewer({
-  run: (ctx, input) => codex(ctx, input),
+  async run(ctx, input) {
+    return codex(ctx, input);
+  },
 });
 ```
 
@@ -154,7 +158,27 @@ exactly what to fix.
 
 ## Customising agent behaviour
 
-The built-in model adapter is optional. A definition can run any code the project needs:
+Codex does not own the stage definition. The project can inspect or transform the typed
+context and input before deciding how to invoke it:
+
+```typescript
+import { codex, defineExecutor } from "@patchdock/sdk";
+
+export default defineExecutor({
+  async run(ctx, input) {
+    ctx.log(`Starting executor attempt ${ctx.attempt}/${ctx.maxAttempts}`);
+
+    if (input.reviews.length > 0) {
+      ctx.log("Passing previous review feedback to Codex");
+    }
+
+    return codex(ctx, input);
+  },
+});
+```
+
+The built-in model adapter is optional. A definition can instead run any code the project
+needs:
 
 - Read and transform the typed input.
 - Inspect the preassigned stage context.
@@ -172,7 +196,7 @@ import {
   type ExecutorInput,
   type ExecutionResultData,
   type StageContext,
-} from "patchdock-sdk";
+} from "@patchdock/sdk";
 import { runMyModel } from "./my-model";
 import { toExecutorOutput } from "./contracts";
 
@@ -193,12 +217,10 @@ boundary is the returned output: it must satisfy `PlanData`, `ExecutionResultDat
 
 ## Supported models
 
-Patchdock does not ship a completed built-in model adapter yet.
-
-| Model  | Status         | Planned import                |
-| ------ | -------------- | ----------------------------- |
-| Codex  | In development | `patchdock-sdk/agents/codex`  |
-| Claude | Planned        | `patchdock-sdk/agents/claude` |
+| Model  | Status   | Import           |
+| ------ | -------- | ---------------- |
+| Codex  | Built in | `@patchdock/sdk` |
+| Claude | Planned  | —                |
 
 Built-in agents will use the same context and contracts as custom agents. Switching from
 a custom implementation to a supported model should not require changes to the
@@ -211,7 +233,7 @@ surrounding pipeline.
 An agent file is a TypeScript module with one default export:
 
 ```typescript
-import { definePlanner } from "patchdock-sdk";
+import { definePlanner } from "@patchdock/sdk";
 import { runPlanner } from "./planner-implementation";
 
 export default definePlanner({
@@ -261,7 +283,15 @@ interface StageContext {
   tokenBudget: number | null;
   attempt: number;
   maxAttempts: number;
-  log: (message: string) => void;
+  log: (entry: string | StageLogEvent) => void;
+}
+
+interface StageLogEvent {
+  source: string;
+  event: string;
+  level?: "debug" | "info" | "warn" | "error";
+  message?: string;
+  [field: string]: unknown;
 }
 ```
 
@@ -270,16 +300,40 @@ interface StageContext {
 - `paths` contains the conventional mount locations available to the stage.
 - `tokenBudget` contains the configured budget or `null` when unlimited.
 - `attempt` and `maxAttempts` let retry-aware agents adapt their behaviour.
-- `log(message)` writes a stage-prefixed message into the Patchdock audit log.
+- `log(entry)` writes a structured event or a plain agent message into the Patchdock audit log.
 
 Use `ctx.log` for progress and diagnostic information:
 
 ```typescript
 ctx.log(`Running ${ctx.stage} for task ${ctx.taskId}`);
+
+ctx.log({
+  source: "my-agent",
+  event: "verification_completed",
+  level: "info",
+  command: "pnpm test",
+  exit_code: 0,
+});
 ```
 
-Logs are not contract output. Patchdock captures stdout and stderr for the audit trail,
-but only the object returned from `run` is passed to the pipeline.
+The stage audit stream is JSON Lines. Plain strings are wrapped as `agent/message` events. The
+Codex adapter records lifecycle, command, file-change, tool-call, error, and token-usage
+summaries; it deliberately excludes reasoning, agent prose, command output, tool
+arguments/results, and patch bodies. Logs are not contract output: only the object returned
+from `run` is passed to the pipeline.
+
+### Runtime toolchains
+
+The standard agent image targets TypeScript and JavaScript repositories. It includes Node.js
+22, npm, pnpm, `tsx`, Git, `rg`, `fd`, `jq`, `curl`, and common archive/process utilities.
+Python 3 and native build tools are present for Node dependencies that compile through
+`node-gyp`; they are not advertised as a separate target-repository toolchain. The image
+publishes this inventory to the Codex prompt so the agent knows what it can use.
+
+Codex is also instructed to inspect repository manifests and lockfiles, prefer existing
+repository scripts, run focused checks after editing, and report missing tools or unrun checks
+instead of implying verification succeeded. Use a separate project-specific image when a target
+repository requires a non-Node toolchain such as Go, Java, Rust, or Python application tooling.
 
 ### Mounts
 

@@ -1,17 +1,14 @@
 package docker
 
 import (
-	"archive/tar"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"slices"
 
 	dockerBuild "github.com/docker/docker/api/types/build"
 	"github.com/docker/docker/client"
+	"github.com/moby/go-archive"
 )
 
 type buildOutput struct {
@@ -34,7 +31,10 @@ func build(ctx context.Context, cli *client.Client, spec BuildSpec) (<-chan LogL
 		defer close(logs)
 		defer close(result)
 
-		tarCxt, err := tarDir(spec.ContextDir, spec.Exclude)
+		tarCxt, err := archive.TarWithOptions(spec.ContextDir, &archive.TarOptions{
+			ExcludePatterns: spec.Exclude,
+		})
+
 		if err != nil {
 			result <- BuildResult{Err: fmt.Errorf("failed to tar a folder: %w", err)}
 			return
@@ -109,71 +109,4 @@ func streamBuildLogs(body io.Reader) (<-chan string, <-chan BuildResult) {
 	}()
 
 	return logs, result
-}
-
-func tarDir(srcPath string, exclude []string) (io.ReadCloser, error) {
-	pr, pw := io.Pipe()
-
-	go func() {
-		tw := tar.NewWriter(pw)
-
-		err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if slices.Contains(exclude, info.Name()) {
-				if info.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-
-			if !info.IsDir() && !info.Mode().IsRegular() {
-				return nil
-			}
-
-			header, err := tar.FileInfoHeader(info, "")
-			if err != nil {
-				return err
-			}
-
-			// Make paths relative — Docker requires this for the build context
-			header.Name, err = filepath.Rel(srcPath, path)
-			if err != nil {
-				return err
-			}
-			header.Name = filepath.ToSlash(header.Name)
-
-			if header.Name == "." {
-				return nil
-			}
-
-			if err := tw.WriteHeader(header); err != nil {
-				return err
-			}
-
-			if info.IsDir() {
-				return nil
-			}
-
-			f, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-
-			_, err = io.Copy(tw, f)
-			return err
-		})
-
-		if err != nil {
-			pw.CloseWithError(err)
-			return
-		}
-
-		pw.CloseWithError(tw.Close())
-	}()
-
-	return pr, nil
 }

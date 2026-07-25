@@ -20,7 +20,7 @@ type streamWriter struct {
 }
 
 func (w *streamWriter) Write(p []byte) (int, error) {
-	for _, line := range bytes.Split(p, []byte("\n")) {
+	for line := range bytes.SplitSeq(p, []byte("\n")) {
 		if len(line) == 0 {
 			continue
 		}

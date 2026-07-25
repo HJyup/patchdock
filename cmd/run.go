@@ -65,7 +65,7 @@ func runTask(ctx context.Context, prompt string) error {
 
 	cli, err := docker.NewClient()
 	if err != nil {
-		return fmt.Errorf("connect to docker: %w. Is the Docker daemon running?", err)
+		return fmt.Errorf("connect to docker: %w. Is the Docker daemon running", err)
 	}
 	defer cli.Close()
 
@@ -76,7 +76,7 @@ func runTask(ctx context.Context, prompt string) error {
 
 	found, err := cli.ImageExists(ctx, AgentName)
 	if err != nil {
-		return fmt.Errorf("check image %q: %w. Is the Docker daemon running?", AgentName, err)
+		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", AgentName, err)
 	}
 
 	if !found {

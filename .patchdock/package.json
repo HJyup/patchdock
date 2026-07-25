@@ -1,0 +1,13 @@
+{
+  "name": "patchdock-agents",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent definitions for this repository. Exists so editors and tsc can resolve @patchdock/sdk while authoring; at run time the container resolves the SDK through its own symlink.",
+  "dependencies": {
+    "@patchdock/sdk": "file:../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3"
+  }
+}

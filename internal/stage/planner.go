@@ -13,7 +13,7 @@ type PlannerInput struct {
 }
 
 type PlannerRequest struct {
-	Spec        StageSpec
+	Spec        Spec
 	Input       PlannerInput
 	ExchangeDir string
 	RepoDir     string

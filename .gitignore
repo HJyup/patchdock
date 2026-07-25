@@ -26,10 +26,24 @@ go.work.sum
 
 # env file
 .env
+.env.*
+!.env.example
+
+# Node / TypeScript (sdk/ and .patchdock/ agent authoring)
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+.patchdock/logs/
 
 # Editor/IDE
 .idea/
 .vscode/
+*.swp
 
 # Specifics for the project
 project-demo/

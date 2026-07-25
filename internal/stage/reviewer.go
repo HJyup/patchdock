@@ -16,7 +16,7 @@ type ReviewerInput struct {
 }
 
 type ReviewerRequest struct {
-	Spec         StageSpec
+	Spec         Spec
 	Input        ReviewerInput
 	ExchangeDir  string
 	WorkspaceDir string

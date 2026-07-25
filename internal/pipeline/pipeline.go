@@ -169,8 +169,8 @@ func (p *Pipeline) newStageRunner(logWriter io.Writer) (*stage.Runner, error) {
 	}), nil
 }
 
-func (p *Pipeline) stageSpec(agentFile string) stage.StageSpec {
-	return stage.StageSpec{
+func (p *Pipeline) stageSpec(agentFile string) stage.Spec {
+	return stage.Spec{
 		AgentFile: agentFile,
 		Limits: stage.Limits{
 			Timeout:   p.cfg.Container.Timeout.Duration(),

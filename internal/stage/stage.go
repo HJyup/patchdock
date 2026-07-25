@@ -34,7 +34,7 @@ type runOptions struct {
 	maxAttempts int
 }
 
-func (r *Runner) runStage(ctx context.Context, spec StageSpec, op runOptions, inputCnt any) ([]byte, error) {
+func (r *Runner) runStage(ctx context.Context, spec Spec, op runOptions, inputCnt any) ([]byte, error) {
 	if err := os.Mkdir(op.dir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create exchange dir: %w", err)
 	}
@@ -170,7 +170,7 @@ func writeLogEvent(w io.Writer, event map[string]any) error {
 	return nil
 }
 
-func getEnv(op runOptions, spec StageSpec) map[string]string {
+func getEnv(op runOptions, spec Spec) map[string]string {
 	env := map[string]string{
 		"PATCHDOCK_STAGE":   string(op.stage),
 		"PATCHDOCK_TASK_ID": op.taskID,

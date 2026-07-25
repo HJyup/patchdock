@@ -14,7 +14,7 @@ type ExecutorInput struct {
 }
 
 type ExecutorRequest struct {
-	Spec         StageSpec
+	Spec         Spec
 	Input        ExecutorInput
 	ExchangeDir  string
 	WorkspaceDir string

@@ -18,7 +18,7 @@ type Limits struct {
 	MaxTokens int
 }
 
-type StageSpec struct {
+type Spec struct {
 	AgentFile string
 	Limits    Limits
 }

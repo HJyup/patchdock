@@ -11,7 +11,6 @@ import (
 	"github.com/HJyup/patchdock/internal/stage"
 )
 
-// stagesDir groups the per-stage contract folders under the run dir
 const stagesDir = "stages"
 
 type Logger struct {

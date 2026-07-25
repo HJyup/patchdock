@@ -4,7 +4,7 @@ import (
 	"github.com/HJyup/patchdock/internal/id"
 )
 
-// Task is an issue/prompt which passed as a first context to the planner
+// Task is the issue or prompt the planner starts from
 type Task struct {
 	ID    string `json:"id"`
 	Title string `json:"title,omitempty"`

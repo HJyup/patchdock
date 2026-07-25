@@ -10,7 +10,9 @@ import (
 )
 
 type ReviewerInput struct {
-	Plan             types.Plan              `json:"plan"`
+	Plan  types.Plan `json:"plan"`
+	Patch string     `json:"patch"`
+
 	ExecutionResults []types.ExecutionResult `json:"execution_results"`
 	PreviousReviews  []types.Review          `json:"previous_reviews"`
 }

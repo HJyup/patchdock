@@ -14,17 +14,16 @@ type Review struct {
 	// Summary is the reviewer's 1-2 sentence verdict, surfaced in run results.
 	Summary string `json:"summary"`
 
-	// Feedback is the reviewer's markdown criticism:
+	// Feedback is the reviewer's Markdown criticism:
 	// Required when Decision is reject; welcome on accept too
 	Feedback string `json:"feedback,omitempty"`
 }
 
-// ReviewDecision is the action the orchestrator should take next.
-
+// ReviewDecision is the action the runtime takes next
 type ReviewDecision string
 
 const (
-	// ReviewAccept ship the ExecutionResult.Patch as the final output.
+	// ReviewAccept ship the attempt's diff as the final output
 	ReviewAccept ReviewDecision = "accept"
 
 	// ReviewReject re-run the executor against the same Plan, passing the

@@ -16,8 +16,13 @@ if workspace Git metadata is unavailable.
 Plan (JSON):
 ${JSON.stringify(input.plan, null, 2)}
 
-Execution results, oldest first; the latest one is what you are reviewing and
-its "patch" field is the authoritative diff of what changed:
+The authoritative diff of what changed in the attempt you are reviewing. Use it to
+see what moved, and the workspace files to judge whether the change is correct in
+context:
+${input.patch || "(the executor produced no changes)"}
+
+Execution attempts, oldest first; the latest one is the attempt under review.
+These are the executors' own reports — treat them as claims, not evidence:
 ${JSON.stringify(input.execution_results, null, 2)}
 
 Previous reviews (context for repeated attempts):

@@ -23,7 +23,7 @@ type Spec struct {
 	Limits    Limits
 }
 
-// RunnerOptions contains dependencies shared by every stage in one task run
+// RunnerOptions holds what every stage in one task run shares
 type RunnerOptions struct {
 	Image       string
 	AgentsDir   string
@@ -36,8 +36,7 @@ type Attempt struct {
 	Maximum int
 }
 
-// Runner executes typed stage attempts using shared container machinery.
-// A Runner is task-scoped because its log writer belongs to one audit record.
+// Runner is task-scoped because its log writer belongs to one audit record
 type Runner struct {
 	containers ContainerRunner
 	options    RunnerOptions

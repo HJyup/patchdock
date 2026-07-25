@@ -30,7 +30,6 @@ const executionResultSchema = executionResultDataSchema.extend({
   id: z.string().min(1),
   task_id: z.string().min(1),
   plan_id: z.string().min(1),
-  patch: z.string().optional(),
 });
 
 const reviewFields = z.object({
@@ -61,6 +60,7 @@ export const executorInputSchema = z.object({
 
 export const reviewerInputSchema = z.object({
   plan: planSchema,
+  patch: z.string(),
   execution_results: z.array(executionResultSchema),
   previous_reviews: z.array(reviewSchema),
 });

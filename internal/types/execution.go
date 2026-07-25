@@ -11,27 +11,21 @@ type ExecutionResult struct {
 	// Status summarises the attempt. Everything else it wants to say goes in Notes
 	Status ExecutionStatus `json:"status"`
 
-	// Patch is the unified diff against the base commit, extracted from the
-	// workspace by the runtime after the container exits
-	Patch string `json:"patch,omitempty"`
-
-	// Notes is the executor's markdown account of what it did, what worked,
-	// and what didn't
+	// Notes is the executor's Markdown account of what it did
 	Notes string `json:"notes,omitempty"`
 }
 
-// ExecutionStatus summarizes the outcome of an execution attempt.
 type ExecutionStatus string
 
 const (
-	// ExecutionSuccess the executor completed the plan; Patch is the proposed change.
+	// ExecutionSuccess the executor completed the plan
 	ExecutionSuccess ExecutionStatus = "success"
 
-	// ExecutionPartialSuccess part of the plan was completed. Patch reflects
-	// what was done; the reviewer decides whether to accept.
+	// ExecutionPartialSuccess part of the plan was completed; the reviewer
+	// decides whether the resulting diff is worth accepting
 	ExecutionPartialSuccess ExecutionStatus = "partial_success"
 
-	// ExecutionFailed unrecoverable failure. Patch may be empty or partial.
+	// ExecutionFailed unrecoverable failure. The diff may be empty or partial
 	ExecutionFailed ExecutionStatus = "failed"
 )
 

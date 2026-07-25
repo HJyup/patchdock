@@ -116,7 +116,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		if err != nil {
 			return out, fmt.Errorf("executor stage (failed computing diffs): %w", err)
 		}
-		res.Patch = diff
 
 		history.AddExecution(res)
 		out.Execution = res
@@ -125,6 +124,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			Spec: p.stageSpec(p.cfg.Stages[types.StageReviewer]),
 			Input: stage.ReviewerInput{
 				Plan:             plan,
+				Patch:            diff,
 				ExecutionResults: history.Executions,
 				PreviousReviews:  history.Reviews,
 			},
@@ -142,8 +142,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		out.Attempts = len(history.Executions)
 
 		if rev.Decision == types.ReviewAccept {
-			diffsBytes := []byte(history.Executions[len(history.Executions)-1].Patch)
-			if err := logger.WriteDiffs(diffsBytes); err != nil {
+			if err := logger.WriteDiffs([]byte(diff)); err != nil {
 				return out, fmt.Errorf("write workspace patch: %w", err)
 			}
 

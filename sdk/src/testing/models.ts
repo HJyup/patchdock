@@ -34,7 +34,6 @@ export function fullExecutionResult() {
     task_id: "task-1",
     plan_id: "plan-1",
     status: "success",
-    patch: "diff --git a/src/greet.ts b/src/greet.ts\n",
     notes: "Implemented farewell in src/greet.ts.",
   };
 }

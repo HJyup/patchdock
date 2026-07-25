@@ -12,18 +12,14 @@ import (
 )
 
 type buildOutput struct {
-	// Logs from the output while building an image
 	Stream string `json:"stream"`
 	Error  string `json:"error"`
-	// Getting an image ID after image resolution
-	Aux struct {
+	Aux    struct {
 		ID string `json:"ID"`
 	} `json:"aux"`
 }
 
-// Build creates a Docker image from the given path and returns two channels:
-// logs streams build output lines, result emits a single buildResult with
-// the final ImageID or an error. Both channels are closed when the build completes
+// build closes both channels when the build completes, whether it succeeded or not.
 func build(ctx context.Context, cli *client.Client, spec BuildSpec) (<-chan LogLine, <-chan BuildResult) {
 	logs, result := make(chan LogLine), make(chan BuildResult, 1)
 

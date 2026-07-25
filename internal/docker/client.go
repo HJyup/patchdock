@@ -10,21 +10,17 @@ import (
 	"github.com/docker/docker/client"
 )
 
-// BuildSpec describes one image build: tar ContextDir, send it to the
-// daemon, name the result Tag.
 type BuildSpec struct {
 	ContextDir string
 	Tag        string
 	Exclude    []string
 }
 
-// BuildResult is the terminal outcome of a Build.
 type BuildResult struct {
 	ImageID string // the daemon's content-addressed ID
 	Err     error
 }
 
-// Mount shares one host directory into the container.
 type Mount struct {
 	Source   string // absolute host path
 	Target   string // path inside the container, e.g. "/io", "/repo", "/workspace"
@@ -41,13 +37,11 @@ type RunSpec struct {
 	Timeout    time.Duration     // wall-clock ceiling for the run; 0 = unlimited.
 }
 
-// LogLine is one demuxed output line from a build or run.
 type LogLine struct {
 	Stream string // "stdout" or "stderr"; empty for build output
 	Text   string
 }
 
-// Result is the terminal outcome of a Run.
 type Result struct {
 	ExitCode int64
 	Err      error
@@ -69,16 +63,15 @@ func NewClient() (*Client, error) {
 }
 
 // Run starts a container from spec and streams its demuxed output.
+// Callers must drain the log channel to completion before reading the result
 func (c *Client) Run(ctx context.Context, spec RunSpec) (<-chan LogLine, <-chan Result) {
 	return run(ctx, c.cli, spec)
 }
 
-// Build tars spec.ContextDir, builds it, and tags the result.
 func (c *Client) Build(ctx context.Context, spec BuildSpec) (<-chan LogLine, <-chan BuildResult) {
 	return build(ctx, c.cli, spec)
 }
 
-// ImageExists reports whether an image with the given tag is present on the daemon.
 func (c *Client) ImageExists(ctx context.Context, tag string) (bool, error) {
 	list, err := c.cli.ImageList(ctx, image.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("reference", tag)),

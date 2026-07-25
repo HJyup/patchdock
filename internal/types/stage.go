@@ -1,7 +1,7 @@
 package types
 
-// StageName names a pipeline stage. Used in logs, in the agent-runtime stage
-// dispatch flag, and in feedback routing.
+// StageName is the shared vocabulary between Go and the SDK: it keys the stage
+// config, tags log events, and reaches the container as PATCHDOCK_STAGE
 type StageName string
 
 const (

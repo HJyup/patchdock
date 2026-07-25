@@ -43,18 +43,38 @@ describe("reviewerInputSchema", () => {
   test("accepts full inputs from the host", () => {
     const result = reviewerInputSchema.safeParse({
       plan: fullPlan(),
+      patch: "diff --git a/src/greet.ts b/src/greet.ts\n",
       execution_results: [fullExecutionResult()],
       previous_reviews: [fullReview()],
     });
     expect(result.success).toBe(true);
   });
 
-  test("accepts an execution result without patch and notes (failed early)", () => {
-    const { patch, notes, ...bare } = fullExecutionResult();
-    void patch;
+  test("accepts an empty patch (the executor changed nothing)", () => {
+    const result = reviewerInputSchema.safeParse({
+      plan: fullPlan(),
+      patch: "",
+      execution_results: [fullExecutionResult()],
+      previous_reviews: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects a missing patch (Go always sends the field)", () => {
+    const result = reviewerInputSchema.safeParse({
+      plan: fullPlan(),
+      execution_results: [fullExecutionResult()],
+      previous_reviews: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts an execution result without notes (failed early)", () => {
+    const { notes, ...bare } = fullExecutionResult();
     void notes;
     const result = reviewerInputSchema.safeParse({
       plan: fullPlan(),
+      patch: "",
       execution_results: [bare],
       previous_reviews: [],
     });

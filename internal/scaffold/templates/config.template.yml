@@ -15,7 +15,8 @@ container:
   max_containers: 4
 
 # How many times the executor may be re-run after the reviewer rejects, before
-# the run gives up. Set to 0 for unlimited retries.
+# the run gives up. 0 means a single attempt with no retry. Every retry is
+# another full executor + reviewer round, so this multiplies what a run costs
 retries:
   max: 1
 

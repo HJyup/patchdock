@@ -33,7 +33,7 @@ func LoadCodex(cfg *config.CodexConfig) (Credentials, error) {
 			Mounts: []docker.Mount{mount},
 		}, nil
 	case "":
-		return Credentials{}, fmt.Errorf("Codex auth is missing")
+		return Credentials{}, fmt.Errorf("codex auth is missing")
 	default:
 		return Credentials{}, fmt.Errorf("unsupported Codex auth %q", cfg.Auth)
 	}

@@ -3,8 +3,6 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"io"
-	"math"
 	"path/filepath"
 	"time"
 
@@ -18,12 +16,12 @@ import (
 )
 
 type Pipeline struct {
-	cli        *docker.Client
-	cfg        config.Config
-	image      string
-	repoDir    string
-	agentsDir  string
-	maxRetries int
+	cli         *docker.Client
+	cfg         config.Config
+	image       string
+	repoDir     string
+	agentsDir   string
+	maxAttempts int
 }
 
 type Outcome struct {
@@ -37,17 +35,17 @@ type Outcome struct {
 
 func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDir string) *Pipeline {
 	return &Pipeline{
-		cli:        cli,
-		cfg:        cfg,
-		image:      image,
-		repoDir:    repoDir,
-		agentsDir:  agentsDir,
-		maxRetries: cfg.Retries.Max,
+		cli:         cli,
+		cfg:         cfg,
+		image:       image,
+		repoDir:     repoDir,
+		agentsDir:   agentsDir,
+		maxAttempts: cfg.Retries.Max + 1,
 	}
 }
 
 func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err error) {
-	err = p.validateEnv(ctx)
+	err = p.preflight(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -72,10 +70,17 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		Accepted: false,
 	}
 
-	stages, err := p.newStageRunner(logger)
+	cred, err := auth.LoadCodex(p.cfg.Codex)
 	if err != nil {
 		return out, fmt.Errorf("load Codex credentials: %w", err)
 	}
+
+	stages := stage.NewRunner(p.cli, stage.RunnerOptions{
+		Image:       p.image,
+		AgentsDir:   p.agentsDir,
+		LogWriter:   logger,
+		Credentials: cred,
+	})
 
 	plan, err := stages.RunPlanner(ctx, stage.PlannerRequest{
 		Spec:        p.stageSpec(p.cfg.Stages[types.StagePlanner]),
@@ -96,7 +101,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		return out, fmt.Errorf("failed to create a workspace: %w", err)
 	}
 
-	for attempt := 0; attempt <= p.maxRetries; attempt++ {
+	for attempt := 1; attempt <= p.maxAttempts; attempt++ {
 		res, err := stages.RunExecutor(ctx, stage.ExecutorRequest{
 			Spec: p.stageSpec(p.cfg.Stages[types.StageExecutor]),
 			Input: stage.ExecutorInput{
@@ -105,7 +110,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			},
 			ExchangeDir:  env.ExecutorPath(attempt),
 			WorkspaceDir: wks.Dir,
-			Attempt:      stage.Attempt{Number: attempt + 1, Maximum: p.maxAttempts()},
+			Attempt:      stage.Attempt{Number: attempt, Maximum: p.maxAttempts},
 		})
 		if err != nil {
 			return out, fmt.Errorf("executor stage: %w", err)
@@ -130,7 +135,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			},
 			ExchangeDir:  env.ReviewPath(attempt),
 			WorkspaceDir: wks.Dir,
-			Attempt:      stage.Attempt{Number: attempt + 1, Maximum: p.maxAttempts()},
+			Attempt:      stage.Attempt{Number: attempt, Maximum: p.maxAttempts},
 		})
 		if err != nil {
 			return out, fmt.Errorf("reviewer stage: %w", err)
@@ -154,20 +159,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	return out, nil
 }
 
-func (p *Pipeline) newStageRunner(logWriter io.Writer) (*stage.Runner, error) {
-	credentials, err := auth.LoadCodex(p.cfg.Codex)
-	if err != nil {
-		return nil, err
-	}
-
-	return stage.NewRunner(p.cli, stage.RunnerOptions{
-		Image:       p.image,
-		AgentsDir:   p.agentsDir,
-		LogWriter:   logWriter,
-		Credentials: credentials,
-	}), nil
-}
-
 func (p *Pipeline) stageSpec(agentFile string) stage.Spec {
 	return stage.Spec{
 		AgentFile: agentFile,
@@ -178,20 +169,9 @@ func (p *Pipeline) stageSpec(agentFile string) stage.Spec {
 	}
 }
 
-func (p *Pipeline) maxAttempts() int {
-	if p.maxRetries == math.MaxInt {
-		return 0
-	}
-	return p.maxRetries + 1
-}
-
-func (p *Pipeline) validateEnv(ctx context.Context) error {
-	if p.maxRetries < 0 {
-		return fmt.Errorf("maximum amount of retries is incorrect: %v", p.maxRetries)
-	}
-
-	if p.maxRetries == 0 {
-		p.maxRetries = math.MaxInt
+func (p *Pipeline) preflight(ctx context.Context) error {
+	if p.maxAttempts < 1 {
+		return fmt.Errorf("retries.max must be >= 0, giving at least one attempt (got %d)", p.maxAttempts-1)
 	}
 
 	exists, err := p.cli.ImageExists(ctx, p.image)

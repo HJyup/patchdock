@@ -1,29 +1,32 @@
 package auditlog
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/HJyup/patchdock/internal/stage"
 )
 
-const stagesDir = "stages"
+const (
+	summaryFile      = "run.md"
+	recordFile       = "run.json"
+	patchFile        = "workspace.patch"
+	streamFile       = "stdout.log"
+	failedOutputFile = "failed-output.json"
+)
 
 type Logger struct {
 	logDir  string
 	logFile *os.File
 }
 
-func NewLogger(logDir string) (*Logger, error) {
+func New(logDir string) (*Logger, error) {
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed creating log directory: %w", err)
 	}
 
-	logPath := filepath.Join(logDir, "stdout.log")
+	logPath := filepath.Join(logDir, streamFile)
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating log file: %w", err)
@@ -48,50 +51,38 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func (l *Logger) WriteDiffs(diffs []byte) error {
+func (l *Logger) WriteRun(rec *Record) error {
 	if l.logDir == "" {
-		return fmt.Errorf("cannot write patch: log directory is not initialized")
+		return fmt.Errorf("cannot write run record: log directory is not initialized")
 	}
 
-	diffsPath := filepath.Join(l.logDir, "workspace.patch")
-	if err := os.WriteFile(diffsPath, diffs, 0o644); err != nil {
-		return fmt.Errorf("failed to write workspace.patch: %w", err)
+	encoded, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", recordFile, err)
 	}
+	encoded = append(encoded, '\n')
 
-	return nil
+	return errors.Join(
+		l.writeFile(summaryFile, renderRun(rec)),
+		l.writeFile(recordFile, encoded),
+	)
 }
 
-func (l *Logger) ArchiveStage(srcDir string) error {
+func (l *Logger) WritePatch(diff string) error {
+	return l.writeFile(patchFile, []byte(diff))
+}
+
+func (l *Logger) WriteFailedOutput(raw []byte) error {
+	return l.writeFile(failedOutputFile, raw)
+}
+
+func (l *Logger) writeFile(name string, content []byte) error {
 	if l.logDir == "" {
-		return fmt.Errorf("cannot archive stage: log directory is not initialized")
+		return fmt.Errorf("cannot write %s: log directory is not initialized", name)
 	}
-
-	label := filepath.Base(srcDir)
-	dstDir := filepath.Join(l.logDir, stagesDir, label)
-	if err := os.MkdirAll(dstDir, 0o755); err != nil {
-		return fmt.Errorf("create stage log dir %s: %w", label, err)
+	if err := os.WriteFile(filepath.Join(l.logDir, name), content, 0o644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", name, err)
 	}
-
-	for _, name := range []string{stage.Input, stage.Output} {
-		data, err := os.ReadFile(filepath.Join(srcDir, name))
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("read %s/%s: %w", label, name, err)
-		}
-
-		out := data
-		var pretty bytes.Buffer
-		if json.Indent(&pretty, data, "", "  ") == nil {
-			out = pretty.Bytes()
-		}
-
-		if err := os.WriteFile(filepath.Join(dstDir, name), out, 0o644); err != nil {
-			return fmt.Errorf("archive %s/%s: %w", label, name, err)
-		}
-	}
-
 	return nil
 }
 

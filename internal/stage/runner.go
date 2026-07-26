@@ -29,6 +29,8 @@ type RunnerOptions struct {
 	AgentsDir   string
 	LogWriter   io.Writer
 	Credentials auth.Credentials
+	// kinda call-backish from TypeScript. TBH, I don't know how to handle this in GO
+	OnActivity func(activity string)
 }
 
 type Attempt struct {

@@ -22,10 +22,12 @@ type Pipeline struct {
 	repoDir     string
 	agentsDir   string
 	maxAttempts int
+	reporter    Reporter
 }
 
 type Outcome struct {
 	TaskID    string
+	RunDir    string
 	Plan      types.Plan
 	Execution types.ExecutionResult
 	Review    types.Review
@@ -33,7 +35,11 @@ type Outcome struct {
 	Accepted  bool
 }
 
-func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDir string) *Pipeline {
+func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDir string, reporter Reporter) *Pipeline {
+	if reporter == nil {
+		reporter = emptyReporter{}
+	}
+
 	return &Pipeline{
 		cli:         cli,
 		cfg:         cfg,
@@ -41,6 +47,7 @@ func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDi
 		repoDir:     repoDir,
 		agentsDir:   agentsDir,
 		maxAttempts: cfg.Retries.Max + 1,
+		reporter:    reporter,
 	}
 }
 
@@ -59,15 +66,36 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	runID := fmt.Sprintf("%s-%s", task.ID, time.Now().Format("20060102-150405"))
 	logDir := filepath.Join(p.repoDir, ".patchdock", "logs", runID)
 
-	logger, err := auditlog.NewLogger(logDir)
+	logger, err := auditlog.New(logDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize audit logger: %w", err)
 	}
 	defer logger.Close()
 
-	out = &Outcome{
-		TaskID:   task.ID,
-		Accepted: false,
+	out = &Outcome{TaskID: task.ID, RunDir: logDir}
+
+	rec := &auditlog.Record{RunID: runID, Task: task, StartedAt: time.Now()}
+	failed, rawKept := "setup", false
+	defer func() {
+		rec.Duration = time.Since(rec.StartedAt).Round(time.Second).String()
+		if err != nil {
+			rec.Failure = &auditlog.Failure{Stage: failed, Message: err.Error(), RawOutput: rawKept}
+		}
+		if writeErr := logger.WriteRun(rec); writeErr != nil {
+			fmt.Fprintf(logger, "audit: failed to write run record: %v\n", writeErr)
+		}
+	}()
+
+	keepRawOutput := func(stageErr error) {
+		raw := stage.RawOutput(stageErr)
+		if len(raw) == 0 {
+			return
+		}
+		if writeErr := logger.WriteFailedOutput(raw); writeErr != nil {
+			fmt.Fprintf(logger, "audit: failed to archive raw output: %v\n", writeErr)
+			return
+		}
+		rawKept = true
 	}
 
 	cred, err := auth.LoadCodex(p.cfg.Codex)
@@ -80,20 +108,25 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		AgentsDir:   p.agentsDir,
 		LogWriter:   logger,
 		Credentials: cred,
+		OnActivity:  p.reporter.StageActivity,
 	})
 
+	failed = string(types.StagePlanner)
+	p.reporter.StageStarted(types.StagePlanner, 0)
 	plan, err := stages.RunPlanner(ctx, stage.PlannerRequest{
 		Spec:        p.stageSpec(p.cfg.Stages[types.StagePlanner]),
 		Input:       stage.PlannerInput{Task: task},
 		ExchangeDir: env.PlannerPath(),
 		RepoDir:     p.repoDir,
 	})
+	p.reporter.StageFinished(types.StagePlanner, 0, "", err)
 	if err != nil {
+		keepRawOutput(err)
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
-	archiveStage(logger, env.PlannerPath())
 
 	out.Plan = plan
+	rec.Plan = plan
 	history := newHistory()
 
 	wks, err := workspace.NewWorkspace(p.repoDir, env.WorkspacePath())
@@ -102,6 +135,8 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 
 	for attempt := 1; attempt <= p.maxAttempts; attempt++ {
+		failed = string(types.StageExecutor)
+		p.reporter.StageStarted(types.StageExecutor, attempt)
 		res, err := stages.RunExecutor(ctx, stage.ExecutorRequest{
 			Spec: p.stageSpec(p.cfg.Stages[types.StageExecutor]),
 			Input: stage.ExecutorInput{
@@ -112,19 +147,28 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			WorkspaceDir: wks.Dir,
 			Attempt:      stage.Attempt{Number: attempt, Maximum: p.maxAttempts},
 		})
+		p.reporter.StageFinished(types.StageExecutor, attempt, string(res.Status), err)
 		if err != nil {
+			keepRawOutput(err)
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
-		archiveStage(logger, env.ExecutorPath(attempt))
+
+		history.AddExecution(res)
+		out.Execution = res
+		rec.Attempts = append(rec.Attempts, auditlog.Attempt{Number: attempt, Execution: res})
 
 		diff, err := wks.Diff(ctx)
 		if err != nil {
 			return out, fmt.Errorf("executor stage (failed computing diffs): %w", err)
 		}
 
-		history.AddExecution(res)
-		out.Execution = res
+		if err := logger.WritePatch(diff); err != nil {
+			return out, fmt.Errorf("write workspace patch: %w", err)
+		}
+		rec.Patch = auditlog.StatPatch(diff)
 
+		failed = string(types.StageReviewer)
+		p.reporter.StageStarted(types.StageReviewer, attempt)
 		rev, err := stages.RunReviewer(ctx, stage.ReviewerRequest{
 			Spec: p.stageSpec(p.cfg.Stages[types.StageReviewer]),
 			Input: stage.ReviewerInput{
@@ -137,21 +181,20 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			WorkspaceDir: wks.Dir,
 			Attempt:      stage.Attempt{Number: attempt, Maximum: p.maxAttempts},
 		})
+		p.reporter.StageFinished(types.StageReviewer, attempt, string(rev.Decision), err)
 		if err != nil {
+			keepRawOutput(err)
 			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
-		archiveStage(logger, env.ReviewPath(attempt))
 
 		history.AddReview(rev)
 		out.Review = rev
-		out.Attempts = len(history.Executions)
+		out.Attempts = attempt
+		rec.Attempts[len(rec.Attempts)-1].Review = rev
 
 		if rev.Decision == types.ReviewAccept {
-			if err := logger.WriteDiffs([]byte(diff)); err != nil {
-				return out, fmt.Errorf("write workspace patch: %w", err)
-			}
-
 			out.Accepted = true
+			rec.Accepted = true
 			break
 		}
 	}
@@ -184,10 +227,4 @@ func (p *Pipeline) preflight(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func archiveStage(logger *auditlog.Logger, dir string) {
-	if err := logger.ArchiveStage(dir); err != nil {
-		fmt.Fprintf(logger, "audit: failed to archive %s: %v\n", filepath.Base(dir), err)
-	}
 }

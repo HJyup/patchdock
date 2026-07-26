@@ -88,7 +88,10 @@ func run(ctx context.Context, cli *client.Client, spec RunSpec) (<-chan LogLine,
 				Labels:     spec.Labels,
 				Entrypoint: spec.Entrypoint,
 			},
-			&container.HostConfig{Mounts: mounts},
+			&container.HostConfig{
+				Mounts:    mounts,
+				LogConfig: container.LogConfig{Type: "json-file"},
+			},
 			nil, nil, "")
 		if err != nil {
 			res <- Result{Err: fmt.Errorf("failed to create a container: %w", err)}

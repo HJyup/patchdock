@@ -1,11 +1,11 @@
 package stage
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
 
-// ErrContainer reports an agent container that exited non-zero.
 type ErrContainer struct {
 	ExitCode   int64
 	StderrTail []string
@@ -31,6 +31,7 @@ func (e ErrOutputMissing) Error() string {
 // ErrOutputNotJSON reports an output.json whose bytes could not be parsed.
 type ErrOutputNotJSON struct {
 	Err error
+	Raw []byte
 }
 
 func (e ErrOutputNotJSON) Error() string {
@@ -42,6 +43,7 @@ func (e ErrOutputNotJSON) Unwrap() error { return e.Err }
 // ErrContractInvalid reports an output that parsed as JSON but failed contract validation.
 type ErrContractInvalid struct {
 	Err error
+	Raw []byte
 }
 
 func (e ErrContractInvalid) Error() string {
@@ -49,3 +51,17 @@ func (e ErrContractInvalid) Error() string {
 }
 
 func (e ErrContractInvalid) Unwrap() error { return e.Err }
+
+func RawOutput(err error) []byte {
+	var notJSON ErrOutputNotJSON
+	if errors.As(err, &notJSON) {
+		return notJSON.Raw
+	}
+
+	var invalid ErrContractInvalid
+	if errors.As(err, &invalid) {
+		return invalid.Raw
+	}
+
+	return nil
+}

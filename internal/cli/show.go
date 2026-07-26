@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -15,10 +15,10 @@ var showCmd = &cobra.Command{
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 1 {
-			fmt.Printf("patchdock show: (skeleton) would attach to task %s — live stage, token usage, log tail\n", args[0])
+			fmt.Printf("dock show: (skeleton) would attach to task %s — live stage, token usage, log tail\n", args[0])
 			return
 		}
-		fmt.Println("patchdock show: (skeleton) would open the TUI listing all running/recent tasks (stage, attempt, tokens) for inspection")
+		fmt.Println("dock show: (skeleton) would open the TUI listing all running/recent tasks (stage, attempt, tokens) for inspection")
 	},
 }
 

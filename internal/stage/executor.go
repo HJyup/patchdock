@@ -41,7 +41,7 @@ func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.Ex
 
 	var ex types.ExecutionResult
 	if err := json.Unmarshal(raw, &ex); err != nil {
-		return types.ExecutionResult{}, ErrOutputNotJSON{Err: err}
+		return types.ExecutionResult{}, ErrOutputNotJSON{Err: err, Raw: raw}
 	}
 
 	ex.TaskID = req.Input.Plan.TaskID
@@ -49,7 +49,7 @@ func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.Ex
 
 	res, err := types.NewExecutionResult(ex)
 	if err != nil {
-		return types.ExecutionResult{}, ErrContractInvalid{Err: err}
+		return types.ExecutionResult{}, ErrContractInvalid{Err: err, Raw: raw}
 	}
 
 	return res, nil

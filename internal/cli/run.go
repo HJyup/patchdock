@@ -1,6 +1,7 @@
-package cmd
+package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"github.com/HJyup/patchdock/internal/config"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/pipeline"
+	"github.com/HJyup/patchdock/internal/tui"
 	"github.com/HJyup/patchdock/internal/types"
 	"github.com/spf13/cobra"
 )
@@ -34,11 +36,11 @@ var runCmd = &cobra.Command{
 		case runPrompt != "":
 			return runTask(cmd.Context(), runPrompt)
 		case runAll:
-			fmt.Println("patchdock run: (skeleton) would fan out across every open GitHub issue in the repo")
+			fmt.Println("dock run: (skeleton) would fan out across every open GitHub issue in the repo")
 		case len(runIssues) > 0:
-			fmt.Printf("patchdock run: (skeleton) would run the pipeline for issue(s) %v concurrently\n", runIssues)
+			fmt.Printf("dock run: (skeleton) would run the pipeline for issue(s) %v concurrently\n", runIssues)
 		default:
-			fmt.Println("patchdock run: (skeleton) would open the TUI with the issue picker and a prompt input line")
+			fmt.Println("dock run: (skeleton) would open the TUI with the issue picker and a prompt input line")
 		}
 		return nil
 	},
@@ -53,14 +55,14 @@ func runTask(ctx context.Context, prompt string) error {
 	agentsAbs := filepath.Join(repoAbs, ".patchdock")
 	if _, err := os.Stat(agentsAbs); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("%s is not initialised for patchdock. Run `patchdock init` first", repoAbs)
+			return fmt.Errorf("%s is not initialised for patchdock. Run `dock init` first", repoAbs)
 		}
 		return fmt.Errorf("check %s: %w", agentsAbs, err)
 	}
 
 	cfg, err := config.Load(filepath.Join(agentsAbs, "config.yml"))
 	if err != nil {
-		return fmt.Errorf("%w - edit the file, or regenerate the scaffold with `patchdock init --force` (overwrites your agent files)", err)
+		return fmt.Errorf("%w - edit the file, or regenerate the scaffold with `dock init --force` (overwrites your agent files)", err)
 	}
 
 	cli, err := docker.NewClient()
@@ -79,48 +81,79 @@ func runTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", AgentName, err)
 	}
 
+	progress := tui.New(os.Stdout)
+	defer progress.Close()
+	progress.Header(task.ID, task.Description)
+
 	if !found {
-		if err := buildImage(ctx, cli, AgentName, repoAbs); err != nil {
+		if err := buildImage(ctx, cli, AgentName, repoAbs, progress); err != nil {
 			return err
 		}
 	}
 
-	p := pipeline.NewPipeline(cli, cfg, AgentName, repoAbs, agentsAbs)
+	p := pipeline.NewPipeline(cli, cfg, AgentName, repoAbs, agentsAbs, tui.NewReporter(progress))
 	outcome, err := p.Run(ctx, task)
+	progress.Close()
+
 	if err != nil {
-		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, logsFile)
+		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, runReport(outcome))
 	}
 
 	if !outcome.Accepted {
-		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, logsFile)
+		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, runReport(outcome))
 	}
 
-	fmt.Printf("Task %s has finished successfully (attempts: %d)\n", task.ID, outcome.Attempts)
+	progress.Summary(
+		fmt.Sprintf("Pipeline finished successfully · %s", plural(outcome.Attempts, "attempt")),
+		runReport(outcome))
 	return nil
 }
 
-func buildImage(ctx context.Context, cli *docker.Client, image, repoDir string) error {
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+// runReport points at the run's own summary, falling back to the logs root when
+// the run died before a log directory existed
+func runReport(outcome *pipeline.Outcome) string {
+	if outcome == nil || outcome.RunDir == "" {
+		return logsFile
+	}
+	return filepath.Join(outcome.RunDir, "run.md")
+}
+
+func buildImage(ctx context.Context, cli *docker.Client, image, repoDir string, progress *tui.Progress) error {
 	sdkDir := filepath.Join(repoDir, "sdk")
 	if _, err := os.Stat(filepath.Join(sdkDir, "Dockerfile")); err != nil {
 		return fmt.Errorf("image %q not found and this repo has no recipe for it — build it from a patchdock checkout:\n  docker build -t %s <patchdock>/sdk", image, image)
 	}
 
-	fmt.Printf("image %q not found — building from %s (first run only)\n", image, sdkDir)
+	progress.Start(fmt.Sprintf("Building %s %s", image, progress.Muted("(first run only)")))
 
 	logs, result := cli.Build(ctx, docker.BuildSpec{
 		ContextDir: sdkDir,
 		Tag:        image,
 		Exclude:    []string{"node_modules"},
 	})
+
+	// Buffered rather than streamed: a successful build has nothing worth
+	// reading, and a failed one is unreadable without the whole log
+	var buildLog bytes.Buffer
 	for line := range logs {
-		fmt.Print(line.Text)
+		buildLog.WriteString(line.Text)
 	}
 
-	if res := <-result; res.Err != nil {
+	res := <-result
+	progress.Finish("", res.Err)
+
+	if res.Err != nil {
+		fmt.Fprint(os.Stderr, buildLog.String())
 		return fmt.Errorf("failed to build image %q: %w", image, res.Err)
 	}
 
-	fmt.Printf("image %q ready\n\n", image)
 	return nil
 }
 

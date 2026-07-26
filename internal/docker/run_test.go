@@ -181,7 +181,7 @@ func TestRunCancelKillsLabeledContainerAndRemovesIt(t *testing.T) {
 	}
 
 	// While running, the label must make the container findable — this is
-	// the handle `patchdock clean` and the crash-reaper depend on.
+	// the handle `dock clean` and the crash-reaper depend on.
 	deadline := time.Now().Add(10 * time.Second)
 	for findByLabel() == 0 {
 		if time.Now().After(deadline) {

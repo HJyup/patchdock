@@ -49,7 +49,7 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 
 	var rev types.Review
 	if err := json.Unmarshal(raw, &rev); err != nil {
-		return types.Review{}, ErrOutputNotJSON{Err: err}
+		return types.Review{}, ErrOutputNotJSON{Err: err, Raw: raw}
 	}
 
 	rev.TaskID = req.Input.Plan.TaskID
@@ -57,7 +57,7 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 
 	res, err := types.NewReview(rev)
 	if err != nil {
-		return types.Review{}, ErrContractInvalid{Err: err}
+		return types.Review{}, ErrContractInvalid{Err: err, Raw: raw}
 	}
 
 	return res, nil

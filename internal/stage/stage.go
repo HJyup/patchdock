@@ -112,6 +112,12 @@ func (r *Runner) runStage(ctx context.Context, spec Spec, op runOptions, inputCn
 				"message": msg.Text,
 			}
 		}
+		if r.options.OnActivity != nil {
+			if activity := activityOf(event); activity != "" {
+				r.options.OnActivity(activity)
+			}
+		}
+
 		event["stage"] = op.stage
 		event["stream"] = msg.Stream
 		if err := writeLogEvent(logWriter, event); err != nil {

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -15,8 +14,8 @@ var rootCmd = &cobra.Command{
 		Run without arguments to open the TUI: pick GitHub issues or enter a
 		prompt, watch concurrent tasks move through the pipeline, inspect
 		plans and diffs, and gate pull requests.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("dock: (skeleton) would open the TUI — issue picker, prompt input, and the live view of running tasks")
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return promptAndRun(cmd.Context())
 	},
 }
 

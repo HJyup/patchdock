@@ -40,7 +40,7 @@ var runCmd = &cobra.Command{
 		case len(runIssues) > 0:
 			fmt.Printf("dock run: (skeleton) would run the pipeline for issue(s) %v concurrently\n", runIssues)
 		default:
-			fmt.Println("dock run: (skeleton) would open the TUI with the issue picker and a prompt input line")
+			return promptAndRun(cmd.Context())
 		}
 		return nil
 	},

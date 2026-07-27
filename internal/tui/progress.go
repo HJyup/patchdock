@@ -45,7 +45,7 @@ type Progress struct {
 // fallback so much as the correct renderer for a non-terminal
 func New(out io.Writer) *Progress {
 	styles := newStyles(out)
-	live := isTerminal(out) && os.Getenv("TERM") != "dumb"
+	live := usable(out)
 
 	p := &Progress{
 		out:      out,
@@ -202,10 +202,16 @@ func short(d time.Duration) string {
 	return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
 }
 
-// isTerminal reports whether out is a character device. A pipe, a file or a
-// buffer is not, which is what selects the plain renderer
-func isTerminal(out io.Writer) bool {
-	file, ok := out.(*os.File)
+func Interactive(in io.Reader, out io.Writer) bool {
+	return usable(in) && usable(out)
+}
+
+func usable(stream any) bool {
+	return isTerminal(stream) && os.Getenv("TERM") != "dumb"
+}
+
+func isTerminal(stream any) bool {
+	file, ok := stream.(*os.File)
 	if !ok {
 		return false
 	}

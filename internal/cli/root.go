@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 
+	"github.com/HJyup/patchdock/internal/cli/commands"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +16,7 @@ var rootCmd = &cobra.Command{
 		prompt, watch concurrent tasks move through the pipeline, inspect
 		plans and diffs, and gate pull requests.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return promptAndRun(cmd.Context())
+		return commands.RunPrompt(cmd.Context())
 	},
 }
 

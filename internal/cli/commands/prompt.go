@@ -1,4 +1,4 @@
-package cli
+package commands
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/HJyup/patchdock/internal/tui"
 )
 
-func promptAndRun(ctx context.Context) error {
+func RunPrompt(ctx context.Context) error {
 	if !tui.Interactive(os.Stdin, os.Stdout) {
 		return errors.New("no task given, and this is not a terminal to ask on — pass one with `dock run -p \"...\"`")
 	}
@@ -21,5 +21,6 @@ func promptAndRun(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read task: %w", err)
 	}
-	return runTask(ctx, prompt)
+
+	return RunTask(ctx, prompt)
 }

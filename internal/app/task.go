@@ -1,4 +1,4 @@
-package commands
+package app
 
 import (
 	"bytes"
@@ -15,24 +15,24 @@ import (
 	"github.com/HJyup/patchdock/internal/types"
 )
 
-const agentTagPrefix = "patchdock-agent"
+const imageTagPrefix = "patchdock-agent"
 const logsFile = ".patchdock/logs"
 
 func RunTask(ctx context.Context, prompt string) error {
-	repoAbs, err := os.Getwd()
+	repoDir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve current directory: %w", err)
 	}
 
-	agentsAbs := filepath.Join(repoAbs, ".patchdock")
-	if _, err := os.Stat(agentsAbs); err != nil {
+	patchdockDir := filepath.Join(repoDir, ".patchdock")
+	if _, err := os.Stat(patchdockDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("%s is not initialised for patchdock. Run `dock init` first", repoAbs)
+			return fmt.Errorf("%s is not initialised for patchdock. Run `dock init` first", patchdockDir)
 		}
-		return fmt.Errorf("check %s: %w", agentsAbs, err)
+		return fmt.Errorf("check %s: %w", patchdockDir, err)
 	}
 
-	cfg, err := config.Load(filepath.Join(agentsAbs, "config.yml"))
+	patchdockCfg, err := config.Load(filepath.Join(patchdockDir, "config.yml"))
 	if err != nil {
 		return fmt.Errorf("%w - edit the file, or regenerate the scaffold with `dock init --force` (overwrites your agent files)", err)
 	}
@@ -48,10 +48,10 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("invalid task: %w", err)
 	}
 
-	agentTag := fmt.Sprintf(`%v%v`, agentTagPrefix, cfg.ID)
-	found, err := cli.ImageExists(ctx, agentTag)
+	imageTag := fmt.Sprintf(`%v%v`, imageTagPrefix, patchdockCfg.ID)
+	found, err := cli.ImageExists(ctx, imageTag)
 	if err != nil {
-		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", agentTag, err)
+		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", imageTag, err)
 	}
 
 	progress := tui.New(os.Stdout)
@@ -59,12 +59,12 @@ func RunTask(ctx context.Context, prompt string) error {
 	progress.Header(task.ID, task.Description)
 
 	if !found {
-		if err := buildImage(ctx, cli, agentTag, agentsAbs, progress); err != nil {
+		if err := buildImage(ctx, cli, imageTag, repoDir, progress); err != nil {
 			return err
 		}
 	}
 
-	p := pipeline.NewPipeline(cli, cfg, agentTag, repoAbs, agentsAbs, tui.NewReporter(progress))
+	p := pipeline.NewPipeline(cli, patchdockCfg, imageTag, repoDir, patchdockDir, tui.NewReporter(progress))
 	outcome, err := p.Run(ctx, task)
 	progress.Close()
 
@@ -92,7 +92,7 @@ func plural(n int, noun string) string {
 // runReport points at the run's own summary, falling back to the logs root when
 // the run died before a log directory existed
 func runReport(outcome *pipeline.Outcome) string {
-	if outcome == nil || outcome.RunDir == "" {
+	if !outcome.Accepted {
 		return logsFile
 	}
 	return filepath.Join(outcome.RunDir, "run.md")
@@ -104,18 +104,12 @@ func buildImage(ctx context.Context, cli *docker.Client, imageTag, agentsAbs str
 	}
 
 	progress.Start(fmt.Sprintf("Building %s %s", imageTag, progress.Muted("(first run only)")))
-
 	logs, result := cli.Build(ctx, docker.BuildSpec{
 		ContextDir: agentsAbs,
-		Tag:        imageTag,
-		// node_modules is deliberately included: the Dockerfile installs the SDK
-		// from it rather than copying SDK source. Run history is not, and grows
-		// without bound.
-		Exclude: []string{"logs"},
+		ImageTag:   imageTag,
+		Exclude:    []string{"logs"},
 	})
 
-	// Buffered rather than streamed: a successful build has nothing worth
-	// reading, and a failed one is unreadable without the whole log
 	var buildLog bytes.Buffer
 	for line := range logs {
 		buildLog.WriteString(line.Text)

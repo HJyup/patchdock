@@ -23,7 +23,7 @@ type PlannerRequest struct {
 func (r *Runner) RunPlanner(ctx context.Context, req PlannerRequest) (types.Plan, error) {
 	var mounts []docker.Mount
 	if req.RepoDir != "" {
-		mounts = append(mounts, docker.Mount{Source: req.RepoDir, Target: RepoTarget, ReadOnly: true})
+		mounts = append(mounts, docker.Mount{Source: req.RepoDir, Target: repoPath, ReadOnly: true})
 	}
 
 	raw, err := r.runStage(ctx, req.Spec, runOptions{
@@ -40,13 +40,13 @@ func (r *Runner) RunPlanner(ctx context.Context, req PlannerRequest) (types.Plan
 
 	var p types.Plan
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return types.Plan{}, ErrOutputNotJSON{Err: err, Raw: raw}
+		return types.Plan{}, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
 	}
 
 	p.TaskID = req.Input.Task.ID
 	plan, err := types.NewPlan(p)
 	if err != nil {
-		return types.Plan{}, ErrContractInvalid{Err: err, Raw: raw}
+		return types.Plan{}, ErrOutput{Reason: reasonContract, Err: err, Raw: raw}
 	}
 
 	return plan, nil

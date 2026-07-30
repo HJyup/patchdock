@@ -49,12 +49,12 @@ func TestBuildTagsImage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const tag = "patchdock-test-build:tagcheck"
+	const imageTag = "patchdock-test-build:tagcheck"
 	t.Cleanup(func() {
-		_, _ = c.cli.ImageRemove(ctx, tag, image.RemoveOptions{Force: true})
+		_, _ = c.cli.ImageRemove(ctx, imageTag, image.RemoveOptions{Force: true})
 	})
 
-	logs, res := c.Build(ctx, BuildSpec{ContextDir: dir, Tag: tag})
+	logs, res := c.Build(ctx, BuildSpec{ContextDir: dir, ImageTag: imageTag})
 	for range logs {
 		// drain — callers must consume the stream
 	}
@@ -67,12 +67,12 @@ func TestBuildTagsImage(t *testing.T) {
 	}
 
 	// The point of the test: the tag must be findable on the daemon.
-	found, err := c.ImageExists(ctx, tag)
+	found, err := c.ImageExists(ctx, imageTag)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !found {
-		t.Fatalf("ImageExists(%q) = false after a tagged build", tag)
+		t.Fatalf("ImageExists(%q) = false after a tagged build", imageTag)
 	}
 	if found, _ := c.ImageExists(ctx, "patchdock-test-build:no-such-tag"); found {
 		t.Fatal("ImageExists returned true for a tag that was never built")

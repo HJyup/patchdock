@@ -28,7 +28,7 @@ func ensureRunImage(t *testing.T, c *Client) {
 	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine:3\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	logs, res := c.Build(ctx, BuildSpec{ContextDir: dir, Tag: testRunImage})
+	logs, res := c.Build(ctx, BuildSpec{ContextDir: dir, ImageTag: testRunImage})
 	for range logs {
 	}
 	if r := <-res; r.Err != nil {

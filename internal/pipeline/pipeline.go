@@ -16,38 +16,35 @@ import (
 )
 
 type Pipeline struct {
-	cli         *docker.Client
-	cfg         config.Config
-	imageTag    string
-	repoDir     string
-	agentsDir   string
-	maxAttempts int
-	reporter    Reporter
+	cli          *docker.Client
+	cfg          config.Config
+	imageTag     string
+	repoDir      string
+	patchdockDir string
+	maxAttempts  int
+	reporter     Reporter
 }
 
 type Outcome struct {
-	TaskID    string
-	RunDir    string
-	Plan      types.Plan
-	Execution types.ExecutionResult
-	Review    types.Review
-	Attempts  int
-	Accepted  bool
+	TaskID   string
+	RunDir   string
+	Attempts int
+	Accepted bool
 }
 
-func NewPipeline(cli *docker.Client, cfg config.Config, imageTag, repoDir, agentsDir string, reporter Reporter) *Pipeline {
+func NewPipeline(cli *docker.Client, cfg config.Config, imageTag, repoDir, patchdockDir string, reporter Reporter) *Pipeline {
 	if reporter == nil {
 		reporter = emptyReporter{}
 	}
 
 	return &Pipeline{
-		cli:         cli,
-		cfg:         cfg,
-		imageTag:    imageTag,
-		repoDir:     repoDir,
-		agentsDir:   agentsDir,
-		maxAttempts: cfg.Retries.Max + 1,
-		reporter:    reporter,
+		cli:          cli,
+		cfg:          cfg,
+		imageTag:     imageTag,
+		repoDir:      repoDir,
+		patchdockDir: patchdockDir,
+		maxAttempts:  cfg.Retries.Max + 1,
+		reporter:     reporter,
 	}
 }
 
@@ -57,14 +54,14 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		return nil, err
 	}
 
-	dir, err := newTaskDir()
+	dir, err := newDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize task environment: %w", err)
 	}
 	defer dir.Cleanup()
 
 	runID := fmt.Sprintf("%s-%s", task.ID, time.Now().Format("20060102-150405"))
-	logDir := filepath.Join(p.repoDir, ".patchdock", "logs", runID)
+	logDir := filepath.Join(p.patchdockDir, "logs", runID)
 
 	logger, err := auditlog.New(logDir)
 	if err != nil {
@@ -72,7 +69,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 	defer logger.Close()
 
-	out = &Outcome{TaskID: task.ID, RunDir: logDir}
+	out = &Outcome{TaskID: task.ID}
 
 	rec := &auditlog.Record{RunID: runID, Task: task, StartedAt: time.Now()}
 	failed, rawKept := "setup", false
@@ -105,7 +102,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 
 	stages := stage.NewRunner(p.cli, stage.RunnerOptions{
 		ImageTag:    p.imageTag,
-		AgentsDir:   p.agentsDir,
+		PatchdockDir: p.patchdockDir,
 		LogWriter:   logger,
 		Credentials: cred,
 		OnActivity:  p.reporter.StageActivity,
@@ -125,7 +122,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
 
-	out.Plan = plan
 	rec.Plan = plan
 	history := newHistory()
 
@@ -154,7 +150,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		}
 
 		history.AddExecution(res)
-		out.Execution = res
 		rec.Attempts = append(rec.Attempts, auditlog.Attempt{Number: attempt, Execution: res})
 
 		diff, err := wks.Diff(ctx)
@@ -188,7 +183,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		}
 
 		history.AddReview(rev)
-		out.Review = rev
 		out.Attempts = attempt
 		rec.Attempts[len(rec.Attempts)-1].Review = rev
 

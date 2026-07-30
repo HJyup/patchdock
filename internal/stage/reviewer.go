@@ -32,7 +32,7 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 
 	var mounts []docker.Mount
 	if req.WorkspaceDir != "" {
-		mounts = append(mounts, docker.Mount{Source: req.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: true})
+		mounts = append(mounts, docker.Mount{Source: req.WorkspaceDir, Target: workspacePath, ReadOnly: true})
 	}
 
 	raw, err := r.runStage(ctx, req.Spec, runOptions{
@@ -49,7 +49,7 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 
 	var rev types.Review
 	if err := json.Unmarshal(raw, &rev); err != nil {
-		return types.Review{}, ErrOutputNotJSON{Err: err, Raw: raw}
+		return types.Review{}, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
 	}
 
 	rev.TaskID = req.Input.Plan.TaskID
@@ -57,7 +57,7 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 
 	res, err := types.NewReview(rev)
 	if err != nil {
-		return types.Review{}, ErrContractInvalid{Err: err, Raw: raw}
+		return types.Review{}, ErrOutput{Reason: reasonContract, Err: err, Raw: raw}
 	}
 
 	return res, nil

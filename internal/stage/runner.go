@@ -25,10 +25,10 @@ type Spec struct {
 
 // RunnerOptions holds what every stage in one task run shares
 type RunnerOptions struct {
-	ImageTag    string
-	AgentsDir   string
-	LogWriter   io.Writer
-	Credentials auth.Credentials
+	ImageTag     string
+	PatchdockDir string
+	LogWriter    io.Writer
+	Credentials  auth.Credentials
 	// kinda call-backish from TypeScript. TBH, I don't know how to handle this in GO
 	OnActivity func(activity string)
 }

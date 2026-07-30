@@ -17,12 +17,15 @@ import (
 )
 
 const (
-	Input           = "input.json"
-	Output          = "output.json"
-	IOTarget        = "/io"
-	AgentsTarget    = "/agents"
-	RepoTarget      = "/repo"
-	WorkspaceTarget = "/workspace"
+	inputFile  = "input.json"
+	outputFile = "output.json"
+)
+
+const (
+	ioPath        = "/io"
+	agentsPath    = "/agents"
+	repoPath      = "/repo"
+	workspacePath = "/workspace"
 )
 
 type runOptions struct {
@@ -41,40 +44,38 @@ func (r *Runner) runStage(ctx context.Context, spec Spec, op runOptions, inputCn
 
 	ioMount := docker.Mount{
 		Source:   op.dir,
-		Target:   IOTarget,
+		Target:   ioPath,
 		ReadOnly: false,
 	}
 
-	// Mount the agent definitions explicitly rather than reading them out of
-	// the /repo mount: a stage may run without a repo, so agents can't depend
-	// on it being present.
 	agentMount := docker.Mount{
-		Source:   r.options.AgentsDir,
-		Target:   AgentsTarget,
+		Source:   r.options.PatchdockDir,
+		Target:   agentsPath,
 		ReadOnly: true,
 	}
 
 	mounts := make([]docker.Mount, 0, len(op.mounts)+3)
 	for _, mount := range op.mounts {
-		if mount.Target == IOTarget {
-			return nil, fmt.Errorf("mount target %v is reserved for the exchange dir", IOTarget)
+		if mount.Target == ioPath {
+			return nil, fmt.Errorf("mount target %v is reserved for the exchange dir", ioPath)
 		}
-		if mount.Target == AgentsTarget {
-			return nil, fmt.Errorf("mount target %v is reserved for the agents definitions", AgentsTarget)
+		if mount.Target == agentsPath {
+			return nil, fmt.Errorf("mount target %v is reserved for the agents definitions", agentsPath)
 		}
 		mounts = append(mounts, mount)
 	}
 	mounts = append(mounts, ioMount)
 	mounts = append(mounts, agentMount)
+
 	byteSlice, err := json.MarshalIndent(inputCnt, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode input: %w", err)
 	}
 
-	inFile := filepath.Join(op.dir, Input)
+	inFile := filepath.Join(op.dir, inputFile)
 	err = os.WriteFile(inFile, byteSlice, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write %s: %w", Input, err)
+		return nil, fmt.Errorf("failed to write %s: %w", inputFile, err)
 	}
 
 	env := getEnv(op, spec)
@@ -150,13 +151,13 @@ func (r *Runner) runStage(ctx context.Context, spec Spec, op runOptions, inputCn
 		return nil, ErrContainer{ExitCode: res.ExitCode}
 	}
 
-	outFile := filepath.Join(op.dir, Output)
+	outFile := filepath.Join(op.dir, outputFile)
 	content, err := os.ReadFile(outFile)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrOutputMissing{Path: outFile}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", Output, err)
+		return nil, fmt.Errorf("failed to read %s: %w", outputFile, err)
 	}
 
 	return content, nil

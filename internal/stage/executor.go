@@ -24,7 +24,7 @@ type ExecutorRequest struct {
 func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.ExecutionResult, error) {
 	var mounts []docker.Mount
 	if req.WorkspaceDir != "" {
-		mounts = append(mounts, docker.Mount{Source: req.WorkspaceDir, Target: WorkspaceTarget, ReadOnly: false})
+		mounts = append(mounts, docker.Mount{Source: req.WorkspaceDir, Target: workspacePath, ReadOnly: false})
 	}
 
 	raw, err := r.runStage(ctx, req.Spec, runOptions{
@@ -41,7 +41,7 @@ func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.Ex
 
 	var ex types.ExecutionResult
 	if err := json.Unmarshal(raw, &ex); err != nil {
-		return types.ExecutionResult{}, ErrOutputNotJSON{Err: err, Raw: raw}
+		return types.ExecutionResult{}, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
 	}
 
 	ex.TaskID = req.Input.Plan.TaskID
@@ -49,7 +49,7 @@ func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.Ex
 
 	res, err := types.NewExecutionResult(ex)
 	if err != nil {
-		return types.ExecutionResult{}, ErrContractInvalid{Err: err, Raw: raw}
+		return types.ExecutionResult{}, ErrOutput{Reason: reasonContract, Err: err, Raw: raw}
 	}
 
 	return res, nil

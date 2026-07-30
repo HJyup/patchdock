@@ -13,13 +13,6 @@ type Task struct {
 	Labels      []string `json:"labels,omitempty"`
 }
 
-func (t *Task) validate() error {
-	var e errs
-	e.required("task.id", t.ID)
-	e.required("task.description", t.Description)
-	return e.join()
-}
-
 func NewTask(t Task) (Task, error) {
 	if t.ID == "" {
 		t.ID = id.New("task")
@@ -28,4 +21,11 @@ func NewTask(t Task) (Task, error) {
 		return Task{}, err
 	}
 	return t, nil
+}
+
+func (t *Task) validate() error {
+	var e errs
+	e.required("task.id", t.ID)
+	e.required("task.description", t.Description)
+	return e.join()
 }

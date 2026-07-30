@@ -38,8 +38,8 @@ func build(ctx context.Context, cli *client.Client, spec BuildSpec) (<-chan LogL
 		defer tarCxt.Close()
 
 		opts := dockerBuild.ImageBuildOptions{ForceRemove: true}
-		if spec.Tag != "" {
-			opts.Tags = []string{spec.Tag}
+		if spec.ImageTag != "" {
+			opts.Tags = []string{spec.ImageTag}
 		}
 		img, err := cli.ImageBuild(ctx, tarCxt, opts)
 
@@ -49,60 +49,42 @@ func build(ctx context.Context, cli *client.Client, spec BuildSpec) (<-chan LogL
 		}
 		defer img.Body.Close()
 
-		streamLogs, streamResult := streamBuildLogs(img.Body)
-		for msg := range streamLogs {
-			logs <- LogLine{
-				Stream: "",
-				Text:   msg,
-			}
-		}
-
-		result <- <-streamResult
+		streamBuildLogs(img.Body, logs, result)
 	}()
 
 	return logs, result
 }
 
-func streamBuildLogs(body io.Reader) (<-chan string, <-chan BuildResult) {
-	logs, result := make(chan string), make(chan BuildResult, 1)
+func streamBuildLogs(body io.Reader, logs chan LogLine, result chan BuildResult) {
+	var imageID string
+	decoder := json.NewDecoder(body)
 
-	go func() {
-		var imageID string
+	for {
+		var out buildOutput
 
-		defer close(logs)
-		defer close(result)
-
-		decoder := json.NewDecoder(body)
-
-		for {
-			var out buildOutput
-
-			err := decoder.Decode(&out)
-			if err == io.EOF {
-				break
-			}
-
-			if err != nil {
-				result <- BuildResult{Err: fmt.Errorf("build stream failed: %w", err)}
-				return
-			}
-
-			if out.Error != "" {
-				result <- BuildResult{Err: fmt.Errorf("docker build failed: %s", out.Error)}
-				return
-			}
-
-			if out.Aux.ID != "" {
-				imageID = out.Aux.ID
-			}
-
-			if out.Stream != "" {
-				logs <- out.Stream
-			}
+		err := decoder.Decode(&out)
+		if err == io.EOF {
+			break
 		}
 
-		result <- BuildResult{ImageID: imageID}
-	}()
+		if err != nil {
+			result <- BuildResult{Err: fmt.Errorf("build stream failed: %w", err)}
+			return
+		}
 
-	return logs, result
+		if out.Error != "" {
+			result <- BuildResult{Err: fmt.Errorf("docker build failed: %s", out.Error)}
+			return
+		}
+
+		if out.Aux.ID != "" {
+			imageID = out.Aux.ID
+		}
+
+		if out.Stream != "" {
+			logs <- LogLine{Text: out.Stream}
+		}
+	}
+
+	result <- BuildResult{ImageID: imageID}
 }

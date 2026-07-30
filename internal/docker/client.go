@@ -12,7 +12,7 @@ import (
 
 type BuildSpec struct {
 	ContextDir string
-	Tag        string
+	ImageTag   string
 	Exclude    []string
 }
 
@@ -72,12 +72,12 @@ func (c *Client) Build(ctx context.Context, spec BuildSpec) (<-chan LogLine, <-c
 	return build(ctx, c.cli, spec)
 }
 
-func (c *Client) ImageExists(ctx context.Context, tag string) (bool, error) {
+func (c *Client) ImageExists(ctx context.Context, imageTag string) (bool, error) {
 	list, err := c.cli.ImageList(ctx, image.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("reference", tag)),
+		Filters: filters.NewArgs(filters.Arg("reference", imageTag)),
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to list images for tag %q: %w", tag, err)
+		return false, fmt.Errorf("failed to list images for tag %q: %w", imageTag, err)
 	}
 
 	return len(list) > 0, nil

@@ -10,7 +10,7 @@ type taskDir struct {
 	rootDir string
 }
 
-func newTaskDir() (*taskDir, error) {
+func newDir() (*taskDir, error) {
 	tempIO, err := os.MkdirTemp("", "patchdock-io-*")
 	if err != nil {
 		return nil, err

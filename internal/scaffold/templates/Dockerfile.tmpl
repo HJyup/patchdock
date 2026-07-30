@@ -39,8 +39,7 @@ ENTRYPOINT ["tsx", "/node_modules/@patchdock/sdk/runtime/main.ts"]
 # ── Stream hygiene ────────────────────────────────────────────────────────────
 # No tty: stop git prompting, and keep ANSI and spinners out of the JSON logs.
 ENV GIT_TERMINAL_PROMPT=0 \
-    NO_COLOR=1 \
-    CI=1
+    NO_COLOR=1
 
 # ══ PROJECT SCOPE — everything below this line is yours ═══════════════════════
 # Add your repository's toolchain so agents can run its real build and checks.

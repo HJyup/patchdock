@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const AgentName = "patchdock-agent:dev"
+const AgentTagPrefix = "patchdock-agent"
 const logsFile = ".patchdock/logs"
 
 var (
@@ -76,9 +76,10 @@ func runTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("invalid task: %w", err)
 	}
 
-	found, err := cli.ImageExists(ctx, AgentName)
+	agentTag := fmt.Sprintf(`%v%v`, AgentTagPrefix, cfg.ID)
+	found, err := cli.ImageExists(ctx, agentTag)
 	if err != nil {
-		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", AgentName, err)
+		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", agentTag, err)
 	}
 
 	progress := tui.New(os.Stdout)
@@ -86,12 +87,12 @@ func runTask(ctx context.Context, prompt string) error {
 	progress.Header(task.ID, task.Description)
 
 	if !found {
-		if err := buildImage(ctx, cli, AgentName, repoAbs, progress); err != nil {
+		if err := buildImage(ctx, cli, agentTag, agentsAbs, progress); err != nil {
 			return err
 		}
 	}
 
-	p := pipeline.NewPipeline(cli, cfg, AgentName, repoAbs, agentsAbs, tui.NewReporter(progress))
+	p := pipeline.NewPipeline(cli, cfg, agentTag, repoAbs, agentsAbs, tui.NewReporter(progress))
 	outcome, err := p.Run(ctx, task)
 	progress.Close()
 
@@ -125,18 +126,20 @@ func runReport(outcome *pipeline.Outcome) string {
 	return filepath.Join(outcome.RunDir, "run.md")
 }
 
-func buildImage(ctx context.Context, cli *docker.Client, image, repoDir string, progress *tui.Progress) error {
-	sdkDir := filepath.Join(repoDir, "sdk")
-	if _, err := os.Stat(filepath.Join(sdkDir, "Dockerfile")); err != nil {
-		return fmt.Errorf("image %q not found and this repo has no recipe for it — build it from a patchdock checkout:\n  docker build -t %s <patchdock>/sdk", image, image)
+func buildImage(ctx context.Context, cli *docker.Client, imageTag, agentsAbs string, progress *tui.Progress) error {
+	if _, err := os.Stat(filepath.Join(agentsAbs, "Dockerfile")); err != nil {
+		return fmt.Errorf("image %q not found and %s has no Dockerfile — run `dock init` to scaffold one", imageTag, agentsAbs)
 	}
 
-	progress.Start(fmt.Sprintf("Building %s %s", image, progress.Muted("(first run only)")))
+	progress.Start(fmt.Sprintf("Building %s %s", imageTag, progress.Muted("(first run only)")))
 
 	logs, result := cli.Build(ctx, docker.BuildSpec{
-		ContextDir: sdkDir,
-		Tag:        image,
-		Exclude:    []string{"node_modules"},
+		ContextDir: agentsAbs,
+		Tag:        imageTag,
+		// node_modules is deliberately included: the Dockerfile installs the SDK
+		// from it rather than copying SDK source. Run history is not, and grows
+		// without bound.
+		Exclude: []string{"logs"},
 	})
 
 	// Buffered rather than streamed: a successful build has nothing worth
@@ -151,7 +154,7 @@ func buildImage(ctx context.Context, cli *docker.Client, image, repoDir string, 
 
 	if res.Err != nil {
 		fmt.Fprint(os.Stderr, buildLog.String())
-		return fmt.Errorf("failed to build image %q: %w", image, res.Err)
+		return fmt.Errorf("failed to build image %q: %w", imageTag, res.Err)
 	}
 
 	return nil

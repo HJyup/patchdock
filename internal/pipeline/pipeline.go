@@ -18,7 +18,7 @@ import (
 type Pipeline struct {
 	cli         *docker.Client
 	cfg         config.Config
-	image       string
+	imageTag    string
 	repoDir     string
 	agentsDir   string
 	maxAttempts int
@@ -35,7 +35,7 @@ type Outcome struct {
 	Accepted  bool
 }
 
-func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDir string, reporter Reporter) *Pipeline {
+func NewPipeline(cli *docker.Client, cfg config.Config, imageTag, repoDir, agentsDir string, reporter Reporter) *Pipeline {
 	if reporter == nil {
 		reporter = emptyReporter{}
 	}
@@ -43,7 +43,7 @@ func NewPipeline(cli *docker.Client, cfg config.Config, image, repoDir, agentsDi
 	return &Pipeline{
 		cli:         cli,
 		cfg:         cfg,
-		image:       image,
+		imageTag:    imageTag,
 		repoDir:     repoDir,
 		agentsDir:   agentsDir,
 		maxAttempts: cfg.Retries.Max + 1,
@@ -57,11 +57,11 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		return nil, err
 	}
 
-	env, err := newTaskEnv()
+	dir, err := newTaskDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize task environment: %w", err)
 	}
-	defer env.Cleanup()
+	defer dir.Cleanup()
 
 	runID := fmt.Sprintf("%s-%s", task.ID, time.Now().Format("20060102-150405"))
 	logDir := filepath.Join(p.repoDir, ".patchdock", "logs", runID)
@@ -104,7 +104,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 
 	stages := stage.NewRunner(p.cli, stage.RunnerOptions{
-		Image:       p.image,
+		ImageTag:    p.imageTag,
 		AgentsDir:   p.agentsDir,
 		LogWriter:   logger,
 		Credentials: cred,
@@ -116,7 +116,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	plan, err := stages.RunPlanner(ctx, stage.PlannerRequest{
 		Spec:        p.stageSpec(p.cfg.Stages[types.StagePlanner]),
 		Input:       stage.PlannerInput{Task: task},
-		ExchangeDir: env.PlannerPath(),
+		ExchangeDir: dir.PlannerPath(),
 		RepoDir:     p.repoDir,
 	})
 	p.reporter.StageFinished(types.StagePlanner, 0, "", err)
@@ -129,7 +129,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	rec.Plan = plan
 	history := newHistory()
 
-	wks, err := workspace.NewWorkspace(p.repoDir, env.WorkspacePath())
+	wks, err := workspace.NewWorkspace(p.repoDir, dir.WorkspacePath())
 	if err != nil {
 		return out, fmt.Errorf("failed to create a workspace: %w", err)
 	}
@@ -143,7 +143,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 				Plan:    plan,
 				Reviews: history.Reviews,
 			},
-			ExchangeDir:  env.ExecutorPath(attempt),
+			ExchangeDir:  dir.ExecutorPath(attempt),
 			WorkspaceDir: wks.Dir,
 			Attempt:      stage.Attempt{Number: attempt, Maximum: p.maxAttempts},
 		})
@@ -177,7 +177,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 				ExecutionResults: history.Executions,
 				PreviousReviews:  history.Reviews,
 			},
-			ExchangeDir:  env.ReviewPath(attempt),
+			ExchangeDir:  dir.ReviewPath(attempt),
 			WorkspaceDir: wks.Dir,
 			Attempt:      stage.Attempt{Number: attempt, Maximum: p.maxAttempts},
 		})
@@ -217,13 +217,13 @@ func (p *Pipeline) preflight(ctx context.Context) error {
 		return fmt.Errorf("retries.max must be >= 0, giving at least one attempt (got %d)", p.maxAttempts-1)
 	}
 
-	exists, err := p.cli.ImageExists(ctx, p.image)
+	exists, err := p.cli.ImageExists(ctx, p.imageTag)
 	if err != nil {
 		return err
 	}
 
 	if !exists {
-		return fmt.Errorf("image %q not found — build it first", p.image)
+		return fmt.Errorf("image %q not found — build it first", p.imageTag)
 	}
 
 	return nil

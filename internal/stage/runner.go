@@ -25,7 +25,7 @@ type Spec struct {
 
 // RunnerOptions holds what every stage in one task run shares
 type RunnerOptions struct {
-	Image       string
+	ImageTag    string
 	AgentsDir   string
 	LogWriter   io.Writer
 	Credentials auth.Credentials

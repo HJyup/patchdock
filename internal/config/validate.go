@@ -18,6 +18,10 @@ func (c *Config) Validate() error {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
 
+	if strings.TrimSpace(c.ID) == "" {
+		addf("config.id: must be non empty")
+	}
+
 	if c.Container.Timeout < 0 {
 		addf("config.container.timeout: must be >= 0")
 	}

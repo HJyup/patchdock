@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/HJyup/patchdock/internal/id"
+)
 
 const (
 	DefaultTimeout       = Duration(10 * time.Minute)
@@ -10,7 +14,10 @@ const (
 )
 
 func Defaults() Config {
+	id := id.New("")
+
 	return Config{
+		ID: id,
 		Container: Container{
 			Timeout:       DefaultTimeout,
 			TokenBudget:   DefaultTokenBudget,

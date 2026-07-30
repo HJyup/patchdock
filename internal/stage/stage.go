@@ -84,7 +84,7 @@ func (r *Runner) runStage(ctx context.Context, spec Spec, op runOptions, inputCn
 	}
 
 	logs, runRes := r.containers.Run(ctx, docker.RunSpec{
-		Image:      r.options.Image,
+		Image:      r.options.ImageTag,
 		Mounts:     mounts,
 		Env:        env,
 		Labels:     map[string]string{"patchdock.task-id": op.taskID},

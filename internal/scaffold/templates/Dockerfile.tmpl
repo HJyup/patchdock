@@ -1,0 +1,55 @@
+# Patchdock agent runtime image. One container per pipeline stage.
+
+FROM node:22-bookworm-slim
+
+ARG TSX_VERSION=4.22.4
+ARG CODEX_VERSION=0.142.4
+
+# ── System packages ───────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        make \
+        ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Git configuration ─────────────────────────────────────────────────────────
+# Mounts are owned by the host user, so git rejects them without safe.directory.
+RUN git config --system --add safe.directory '*' \
+    && git config --system core.pager cat
+
+# ── Codex configuration ───────────────────────────────────────────────────────
+# The scaffolded agents shell out to `codex exec`. Credentials are mounted by
+# the host at run time.
+RUN npm install -g "@openai/codex@${CODEX_VERSION}"
+
+# ── SDK runtime ───────────────────────────────────────────────────────────────
+# Agents are .ts files imported unbuilt, so tsx is required.
+RUN npm install -g "tsx@${TSX_VERSION}"
+
+# The SDK comes from this directory's node_modules (`pnpm install` in
+# .patchdock), not from source. /node_modules is where agents mounted at /agents
+# resolve a bare "@patchdock/sdk".
+COPY node_modules /node_modules
+
+# The host passes no command, so this line is the whole contract.
+ENTRYPOINT ["tsx", "/node_modules/@patchdock/sdk/runtime/main.ts"]
+
+# ── Stream hygiene ────────────────────────────────────────────────────────────
+# No tty: stop git prompting, and keep ANSI and spinners out of the JSON logs.
+ENV GIT_TERMINAL_PROMPT=0 \
+    NO_COLOR=1 \
+    CI=1
+
+# ══ PROJECT SCOPE — everything below this line is yours ═══════════════════════
+# Add your repository's toolchain so agents can run its real build and checks.
+# Prewarm dependencies here too: COPY manifests before sources.
+#
+#   Node native deps:  build-essential pkg-config python3
+#   Go:                COPY --from=golang:1.24-bookworm /usr/local/go /usr/local/go
+#                      ENV PATH="/usr/local/go/bin:${PATH}"
+#   Python:            COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Injected verbatim into every agent prompt — keep it accurate.
+ENV PATCHDOCK_TOOLCHAIN_SUMMARY="Debian Bookworm; Node.js 22 with npm; TypeScript execution through tsx; Git, ripgrep (rg), make and curl. No C toolchain, no Python, no other language runtime."

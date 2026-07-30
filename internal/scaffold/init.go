@@ -28,6 +28,7 @@ var scaffoldFiles = []templateFile{
 	{src: "templates/planner.ts.tmpl", dst: "planner.ts"},
 	{src: "templates/executor.ts.tmpl", dst: "executor.ts"},
 	{src: "templates/reviewer.ts.tmpl", dst: "reviewer.ts"},
+	{src: "templates/Dockerfile.tmpl", dst: "Dockerfile"},
 }
 
 func Init(opts Options) error {

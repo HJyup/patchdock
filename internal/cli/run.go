@@ -14,12 +14,11 @@ var runCmd = &cobra.Command{
 			plan, diff and review of every attempt to .patchdock/logs.
 			Pass the task with --prompt, or omit it to be asked for one.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		switch {
-		case runPrompt != "":
+		if runPrompt != "" {
 			return app.RunTask(cmd.Context(), runPrompt)
-		default:
-			return app.RunPromptInput(cmd.Context())
 		}
+
+		return app.RunPromptInput(cmd.Context())
 	},
 }
 

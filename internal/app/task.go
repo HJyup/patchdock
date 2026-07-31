@@ -59,7 +59,7 @@ func RunTask(ctx context.Context, prompt string) error {
 	progress.Header(task.ID, task.Description)
 
 	if !found {
-		if err := buildImage(ctx, cli, imageTag, repoDir, progress); err != nil {
+		if err := buildImage(ctx, cli, imageTag, patchdockDir, progress); err != nil {
 			return err
 		}
 	}
@@ -98,14 +98,14 @@ func runReport(outcome *pipeline.Outcome) string {
 	return filepath.Join(outcome.RunDir, "run.md")
 }
 
-func buildImage(ctx context.Context, cli *docker.Client, imageTag, agentsAbs string, progress *tui.Progress) error {
-	if _, err := os.Stat(filepath.Join(agentsAbs, "Dockerfile")); err != nil {
-		return fmt.Errorf("image %q not found and %s has no Dockerfile — run `dock init` to scaffold one", imageTag, agentsAbs)
+func buildImage(ctx context.Context, cli *docker.Client, imageTag, patchdockDir string, progress *tui.Progress) error {
+	if _, err := os.Stat(filepath.Join(patchdockDir, "Dockerfile")); err != nil {
+		return fmt.Errorf("image %q not found and %s has no Dockerfile — run `dock init` to scaffold one", imageTag, patchdockDir)
 	}
 
 	progress.Start(fmt.Sprintf("Building %s %s", imageTag, progress.Muted("(first run only)")))
 	logs, result := cli.Build(ctx, docker.BuildSpec{
-		ContextDir: agentsAbs,
+		ContextDir: patchdockDir,
 		ImageTag:   imageTag,
 		Exclude:    []string{"logs"},
 	})

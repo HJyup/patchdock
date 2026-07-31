@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var initForce bool
+var force bool
 
 var initCmd = &cobra.Command{
 	Use:   "init",
@@ -18,7 +18,7 @@ var initCmd = &cobra.Command{
 			Refuses to touch an existing .patchdock/ unless --force is given.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path, err := app.RunPatchdockInit(initForce)
+		path, err := app.RunPatchdockInit(force)
 		if err != nil {
 			return err
 		}
@@ -30,5 +30,5 @@ var initCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(initCmd)
-	initCmd.Flags().BoolVar(&initForce, "force", false, "overwrite an existing .patchdock/ directory")
+	initCmd.Flags().BoolVar(&force, "force", false, "overwrite an existing .patchdock/ directory")
 }

@@ -3,13 +3,15 @@ package auditlog
 import (
 	"fmt"
 	"strings"
+
+	"github.com/HJyup/patchdock/internal/utils"
 )
 
 func renderRun(rec *Record) []byte {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s · %s · %s · %s\n\n",
-		rec.Task.ID, outcomeWord(rec), plural(len(rec.Attempts), "attempt"), rec.Duration)
+		rec.Task.ID, outcomeWord(rec), utils.Plural(len(rec.Attempts), "attempt"), rec.Duration)
 
 	if title := strings.TrimSpace(rec.Task.Title); title != "" {
 		fmt.Fprintf(&b, "**%s**\n\n", title)
@@ -70,7 +72,7 @@ func renderFooter(rec *Record) string {
 		return "No file changes · raw container stream in `stdout.log`\n"
 	}
 	return fmt.Sprintf("`%s` · %s, +%d -%d · raw container stream in `stdout.log`\n",
-		patchFile, plural(rec.Patch.Files, "file"), rec.Patch.Additions, rec.Patch.Deletions)
+		patchFile, utils.Plural(rec.Patch.Files, "file"), rec.Patch.Additions, rec.Patch.Deletions)
 }
 
 func outcomeWord(rec *Record) string {
@@ -82,13 +84,6 @@ func outcomeWord(rec *Record) string {
 	default:
 		return "rejected"
 	}
-}
-
-func plural(n int, noun string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, noun)
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 const sectionDepth = 2

@@ -3,7 +3,7 @@ package types
 import (
 	"time"
 
-	"github.com/HJyup/patchdock/internal/id"
+	"github.com/HJyup/patchdock/internal/utils"
 )
 
 // Plan is the planner stage's output: an immutable description of the work
@@ -24,7 +24,7 @@ type Plan struct {
 
 func NewPlan(p Plan) (Plan, error) {
 	if p.ID == "" {
-		p.ID = id.New("plan")
+		p.ID = utils.NewID("plan")
 	}
 	if p.CreatedAt.IsZero() {
 		p.CreatedAt = time.Now().UTC()

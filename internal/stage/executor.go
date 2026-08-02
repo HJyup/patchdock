@@ -2,7 +2,6 @@ package stage
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
@@ -39,18 +38,8 @@ func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.Ex
 		return types.ExecutionResult{}, err
 	}
 
-	var ex types.ExecutionResult
-	if err := json.Unmarshal(raw, &ex); err != nil {
-		return types.ExecutionResult{}, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
-	}
-
-	ex.TaskID = req.Input.Plan.TaskID
-	ex.PlanID = req.Input.Plan.ID
-
-	res, err := types.NewExecutionResult(ex)
-	if err != nil {
-		return types.ExecutionResult{}, ErrOutput{Reason: reasonContract, Err: err, Raw: raw}
-	}
-
-	return res, nil
+	return decodeOutput(raw, func(er *types.ExecutionResult) {
+		er.TaskID = req.Input.Plan.TaskID
+		er.PlanID = req.Input.Plan.ID
+	}, types.NewExecutionResult)
 }

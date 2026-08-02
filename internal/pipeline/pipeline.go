@@ -31,7 +31,7 @@ type Outcome struct {
 	Accepted bool
 }
 
-func NewPipeline(cli *docker.Client, cfg config.Config, imageTag, repoDir, patchdockDir string, reporter Reporter) *Pipeline {
+func New(cli *docker.Client, cfg config.Config, imageTag, repoDir, patchdockDir string, reporter Reporter) *Pipeline {
 	if reporter == nil {
 		reporter = stubReporter{}
 	}

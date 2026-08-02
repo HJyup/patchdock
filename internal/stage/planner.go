@@ -2,7 +2,6 @@ package stage
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/types"
@@ -38,16 +37,5 @@ func (r *Runner) RunPlanner(ctx context.Context, req PlannerRequest) (types.Plan
 		return types.Plan{}, err
 	}
 
-	var p types.Plan
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return types.Plan{}, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
-	}
-
-	p.TaskID = req.Input.Task.ID
-	plan, err := types.NewPlan(p)
-	if err != nil {
-		return types.Plan{}, ErrOutput{Reason: reasonContract, Err: err, Raw: raw}
-	}
-
-	return plan, nil
+	return decodeOutput(raw, func(p *types.Plan) { p.TaskID = req.Input.Task.ID }, types.NewPlan)
 }

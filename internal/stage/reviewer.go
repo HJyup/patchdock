@@ -2,7 +2,6 @@ package stage
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/HJyup/patchdock/internal/docker"
@@ -47,18 +46,8 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 		return types.Review{}, err
 	}
 
-	var rev types.Review
-	if err := json.Unmarshal(raw, &rev); err != nil {
-		return types.Review{}, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
-	}
-
-	rev.TaskID = req.Input.Plan.TaskID
-	rev.ExecutionID = req.Input.ExecutionResults[len(req.Input.ExecutionResults)-1].ID
-
-	res, err := types.NewReview(rev)
-	if err != nil {
-		return types.Review{}, ErrOutput{Reason: reasonContract, Err: err, Raw: raw}
-	}
-
-	return res, nil
+	return decodeOutput(raw, func(r *types.Review) {
+		r.TaskID = req.Input.Plan.TaskID
+		r.ExecutionID = req.Input.ExecutionResults[len(req.Input.ExecutionResults)-1].ID
+	}, types.NewReview)
 }

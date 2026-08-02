@@ -13,6 +13,7 @@ import (
 	"github.com/HJyup/patchdock/internal/pipeline"
 	"github.com/HJyup/patchdock/internal/tui"
 	"github.com/HJyup/patchdock/internal/types"
+	"github.com/HJyup/patchdock/internal/utils"
 )
 
 const imageTagPrefix = "patchdock-agent"
@@ -65,7 +66,7 @@ func RunTask(ctx context.Context, prompt string) error {
 		}
 	}
 
-	p := pipeline.NewPipeline(cli, patchdockCfg, imageTag, repoDir, patchdockDir, tui.NewReporter(progress))
+	p := pipeline.New(cli, patchdockCfg, imageTag, repoDir, patchdockDir, tui.NewReporter(progress))
 	outcome, err := p.Run(ctx, task)
 	progress.Close()
 
@@ -78,16 +79,9 @@ func RunTask(ctx context.Context, prompt string) error {
 	}
 
 	progress.Summary(
-		fmt.Sprintf("Pipeline finished successfully · %s", plural(outcome.Attempts, "attempt")),
+		fmt.Sprintf("Pipeline finished successfully · %s", utils.Plural(outcome.Attempts, "attempt")),
 		runReport())
 	return nil
-}
-
-func plural(n int, noun string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, noun)
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 func runReport() string {

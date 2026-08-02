@@ -1,8 +1,6 @@
 package types
 
-import (
-	"github.com/HJyup/patchdock/internal/id"
-)
+import "github.com/HJyup/patchdock/internal/utils"
 
 // Task is the issue or prompt the planner starts from
 type Task struct {
@@ -15,7 +13,7 @@ type Task struct {
 
 func NewTask(t Task) (Task, error) {
 	if t.ID == "" {
-		t.ID = id.New("task")
+		t.ID = utils.NewID("task")
 	}
 	if err := t.validate(); err != nil {
 		return Task{}, err

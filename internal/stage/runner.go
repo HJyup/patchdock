@@ -2,6 +2,7 @@ package stage
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"time"
 
@@ -46,4 +47,19 @@ type Runner struct {
 
 func NewRunner(containers ContainerRunner, options RunnerOptions) *Runner {
 	return &Runner{containers: containers, options: options}
+}
+
+// Used by other stages to ge the output
+func decodeOutput[T any](raw []byte, stamp func(*T), build func(T) (T, error)) (T, error) {
+	var zero, decoded T
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return zero, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
+	}
+	stamp(&decoded)
+
+	out, err := build(decoded)
+	if err != nil {
+		return zero, ErrOutput{Reason: reasonContract, Err: err, Raw: raw}
+	}
+	return out, nil
 }

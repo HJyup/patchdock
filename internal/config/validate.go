@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 )
 
 var requiredStages = []types.StageName{types.StagePlanner, types.StageExecutor, types.StageReviewer}
+var namespacePattern = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*$`)
 
 func (c *Config) Validate() error {
 	var errs []error
@@ -18,10 +20,9 @@ func (c *Config) Validate() error {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
 
-	if strings.TrimSpace(c.ID) == "" {
-		addf("config.id: must be non empty")
+	if !namespacePattern.MatchString(c.Namespace) {
+		addf("config.name_space: must be lowercase letters or digits, separated by '.', '_' or '-'")
 	}
-
 	if c.Container.Timeout < 0 {
 		addf("config.container.timeout: must be >= 0")
 	}

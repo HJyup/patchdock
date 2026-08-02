@@ -3,13 +3,13 @@ package app
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
+	"os"
 
 	"github.com/HJyup/patchdock/internal/scaffold"
 )
 
 func RunPatchdockInit(force bool) (string, error) {
-	repoDir, err := filepath.Abs(".")
+	repoDir, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("resolve repo dir %s: %w", repoDir, err)
 	}

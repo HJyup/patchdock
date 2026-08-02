@@ -16,7 +16,7 @@ import (
 )
 
 const imageTagPrefix = "patchdock-agent"
-const logsFile = ".patchdock/logs"
+const patchdockFile = ".patchdock"
 
 func RunTask(ctx context.Context, prompt string) error {
 	repoDir, err := os.Getwd()
@@ -24,7 +24,7 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("resolve current directory: %w", err)
 	}
 
-	patchdockDir := filepath.Join(repoDir, ".patchdock")
+	patchdockDir := filepath.Join(repoDir, patchdockFile)
 	if _, err := os.Stat(patchdockDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("%s is not initialised for patchdock. Run `dock init` first", patchdockDir)
@@ -32,7 +32,8 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("check %s: %w", patchdockDir, err)
 	}
 
-	patchdockCfg, err := config.Load(filepath.Join(patchdockDir, "config.yml"))
+	patchdockCfgFile := filepath.Join(patchdockDir, "config.yml")
+	patchdockCfg, err := config.Load(patchdockCfgFile)
 	if err != nil {
 		return fmt.Errorf("%w - edit the file, or regenerate the scaffold with `dock init --force` (overwrites your agent files)", err)
 	}
@@ -48,7 +49,7 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("invalid task: %w", err)
 	}
 
-	imageTag := fmt.Sprintf(`%v%v`, imageTagPrefix, patchdockCfg.ID)
+	imageTag := fmt.Sprintf("%s-%s", imageTagPrefix, patchdockCfg.Namespace)
 	found, err := cli.ImageExists(ctx, imageTag)
 	if err != nil {
 		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", imageTag, err)
@@ -89,11 +90,9 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-// runReport points at the run's own summary, falling back to the logs root when
-// the run died before a log directory existed
 func runReport(outcome *pipeline.Outcome) string {
 	if !outcome.Accepted {
-		return logsFile
+		return filepath.Join(patchdockFile, "logs")
 	}
 	return filepath.Join(outcome.RunDir, "run.md")
 }

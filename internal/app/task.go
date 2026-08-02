@@ -70,16 +70,16 @@ func RunTask(ctx context.Context, prompt string) error {
 	progress.Close()
 
 	if err != nil {
-		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, runReport(outcome))
+		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, runReport())
 	}
 
 	if !outcome.Accepted {
-		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, runReport(outcome))
+		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, runReport())
 	}
 
 	progress.Summary(
 		fmt.Sprintf("Pipeline finished successfully · %s", plural(outcome.Attempts, "attempt")),
-		runReport(outcome))
+		runReport())
 	return nil
 }
 
@@ -90,11 +90,8 @@ func plural(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func runReport(outcome *pipeline.Outcome) string {
-	if !outcome.Accepted {
-		return filepath.Join(patchdockFile, "logs")
-	}
-	return filepath.Join(outcome.RunDir, "run.md")
+func runReport() string {
+	return filepath.Join(patchdockFile, "logs")
 }
 
 func buildImage(ctx context.Context, cli *docker.Client, imageTag, patchdockDir string, progress *tui.Progress) error {

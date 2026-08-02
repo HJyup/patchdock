@@ -27,14 +27,13 @@ type Pipeline struct {
 
 type Outcome struct {
 	TaskID   string
-	RunDir   string
 	Attempts int
 	Accepted bool
 }
 
 func NewPipeline(cli *docker.Client, cfg config.Config, imageTag, repoDir, patchdockDir string, reporter Reporter) *Pipeline {
 	if reporter == nil {
-		reporter = emptyReporter{}
+		reporter = stubReporter{}
 	}
 
 	return &Pipeline{
@@ -49,12 +48,7 @@ func NewPipeline(cli *docker.Client, cfg config.Config, imageTag, repoDir, patch
 }
 
 func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err error) {
-	err = p.preflight(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	dir, err := newDir()
+	dir, err := newTemporaryDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize task environment: %w", err)
 	}
@@ -70,10 +64,13 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	defer logger.Close()
 
 	out = &Outcome{TaskID: task.ID}
+	history := newHistory()
 
 	rec := &auditlog.Record{RunID: runID, Task: task, StartedAt: time.Now()}
 	failed, rawKept := "setup", false
 	defer func() {
+		rec.Attempts = history.auditAttempts()
+		rec.Accepted = out.Accepted
 		rec.Duration = time.Since(rec.StartedAt).Round(time.Second).String()
 		if err != nil {
 			rec.Failure = &auditlog.Failure{Stage: failed, Message: err.Error(), RawOutput: rawKept}
@@ -101,11 +98,11 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 
 	stages := stage.NewRunner(p.cli, stage.RunnerOptions{
-		ImageTag:    p.imageTag,
+		ImageTag:     p.imageTag,
 		PatchdockDir: p.patchdockDir,
-		LogWriter:   logger,
-		Credentials: cred,
-		OnActivity:  p.reporter.StageActivity,
+		LogWriter:    logger,
+		Credentials:  cred,
+		OnActivity:   p.reporter.StageActivity,
 	})
 
 	failed = string(types.StagePlanner)
@@ -123,7 +120,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 
 	rec.Plan = plan
-	history := newHistory()
 
 	wks, err := workspace.NewWorkspace(p.repoDir, dir.WorkspacePath())
 	if err != nil {
@@ -150,7 +146,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		}
 
 		history.AddExecution(res)
-		rec.Attempts = append(rec.Attempts, auditlog.Attempt{Number: attempt, Execution: res})
 
 		diff, err := wks.Diff(ctx)
 		if err != nil {
@@ -184,11 +179,9 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 
 		history.AddReview(rev)
 		out.Attempts = attempt
-		rec.Attempts[len(rec.Attempts)-1].Review = rev
 
 		if rev.Decision == types.ReviewAccept {
 			out.Accepted = true
-			rec.Accepted = true
 			break
 		}
 	}
@@ -204,21 +197,4 @@ func (p *Pipeline) stageSpec(agentFile string) stage.Spec {
 			MaxTokens: p.cfg.Container.TokenBudget,
 		},
 	}
-}
-
-func (p *Pipeline) preflight(ctx context.Context) error {
-	if p.maxAttempts < 1 {
-		return fmt.Errorf("retries.max must be >= 0, giving at least one attempt (got %d)", p.maxAttempts-1)
-	}
-
-	exists, err := p.cli.ImageExists(ctx, p.imageTag)
-	if err != nil {
-		return err
-	}
-
-	if !exists {
-		return fmt.Errorf("image %q not found — build it first", p.imageTag)
-	}
-
-	return nil
 }

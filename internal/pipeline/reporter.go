@@ -9,8 +9,8 @@ type Reporter interface {
 	StageFinished(stage types.StageName, attempt int, note string, err error)
 }
 
-type emptyReporter struct{}
+type stubReporter struct{}
 
-func (emptyReporter) StageStarted(types.StageName, int)                 {}
-func (emptyReporter) StageActivity(string)                              {}
-func (emptyReporter) StageFinished(types.StageName, int, string, error) {}
+func (stubReporter) StageStarted(types.StageName, int)                 {}
+func (stubReporter) StageActivity(string)                              {}
+func (stubReporter) StageFinished(types.StageName, int, string, error) {}

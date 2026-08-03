@@ -13,7 +13,12 @@ type Config struct {
 	Container Container                  `yaml:"container"`
 	Retries   Retries                    `yaml:"retries"`
 	Codex     *CodexConfig               `yaml:"codex,omitempty"`
+	Git       Git                        `yaml:"git"`
 	Stages    map[types.StageName]string `yaml:"stages"`
+}
+
+type Git struct {
+	BranchPrefix string `yaml:"branch_prefix"`
 }
 
 type CodexConfig struct {

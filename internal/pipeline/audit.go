@@ -29,15 +29,15 @@ func newAuditRun(logger *auditlog.Logger, task types.Task) *auditRun {
 	}
 }
 
+func (a *auditRun) Published(branch string) {
+	a.rec.Branch = branch
+}
+
 func (a *auditRun) Planned(plan types.Plan) {
 	a.rec.Plan = plan
 }
 
 func (a *auditRun) Patched(diff string) error {
-	if err := a.logger.WritePatch(diff); err != nil {
-		return err
-	}
-
 	a.rec.Patch = auditlog.StatPatch(diff)
 	return nil
 }

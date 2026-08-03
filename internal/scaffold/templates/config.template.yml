@@ -32,6 +32,9 @@ retries:
 codex:
   auth: host-login
 
+git:
+  branch_prefix: patchdock
+
 # Which filepath drives each stage.
 stages:
   planner: planner.ts

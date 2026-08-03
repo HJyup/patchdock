@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const publishTimeout = 60 * time.Second
+
 type Workspace struct {
 	Dir        string
 	baseCommit string
@@ -76,6 +78,62 @@ func gitDiff(ctx context.Context, dir, baseCommit string) (string, error) {
 	}
 
 	return stdout.String(), nil
+}
+
+func (w *Workspace) Publish(ctx context.Context, branch, message string) error {
+	ctx, cancel := context.WithTimeout(ctx, publishTimeout)
+	defer cancel()
+
+	if err := gitCheckoutNew(ctx, w.Dir, branch); err != nil {
+		return err
+	}
+	if err := gitAddAll(ctx, w.Dir); err != nil {
+		return err
+	}
+	if err := gitCommit(ctx, w.Dir, message); err != nil {
+		return err
+	}
+
+	return gitPush(ctx, w.Dir, "origin", branch)
+}
+
+func gitCheckoutNew(ctx context.Context, dir, branch string) error {
+	cmd := exec.CommandContext(ctx, "git", "checkout", "-b", branch)
+	cmd.Dir = dir
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return gitCommandError(fmt.Sprintf("git checkout -b %s", branch), err, stderr.String())
+	}
+	return nil
+}
+
+func gitCommit(ctx context.Context, dir, message string) error {
+	cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
+	cmd.Dir = dir
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return gitCommandError("git commit", err, stderr.String())
+	}
+	return nil
+}
+
+func gitPush(ctx context.Context, dir, remote, branch string) error {
+	cmd := exec.CommandContext(ctx, "git", "push", remote, branch)
+	cmd.Dir = dir
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return gitCommandError(fmt.Sprintf("git push %s %s", remote, branch), err, stderr.String())
+	}
+	return nil
 }
 
 func gitAddAll(ctx context.Context, dir string) error {

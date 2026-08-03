@@ -8,6 +8,7 @@ import (
 	"github.com/HJyup/patchdock/internal/config"
 	"github.com/HJyup/patchdock/internal/stage"
 	"github.com/HJyup/patchdock/internal/types"
+	"github.com/HJyup/patchdock/internal/utils"
 	"github.com/HJyup/patchdock/internal/workspace"
 )
 
@@ -22,6 +23,7 @@ type Pipeline struct {
 type Outcome struct {
 	Attempts int
 	Accepted bool
+	Branch   string
 }
 
 func New(cfg config.Config, repoDir string, runner *stage.Runner, logger *auditlog.Logger, reporter Reporter) *Pipeline {
@@ -135,7 +137,37 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		}
 	}
 
+	if !out.Accepted {
+		return out, nil
+	}
+
+	branch := p.branchName(task)
+	if err := wks.Publish(ctx, branch, commitMessage(task, plan)); err != nil {
+		audit.Failed(types.StageReviewer, err)
+		return out, fmt.Errorf("publish %s: %w", branch, err)
+	}
+	out.Branch = branch
+	audit.Published(branch)
+
 	return out, nil
+}
+
+func (p *Pipeline) branchName(task types.Task) string {
+	prefix := p.cfg.Git.BranchPrefix
+	if prefix == "" {
+		return task.ID
+	}
+
+	return prefix + "/" + task.ID
+}
+
+func commitMessage(task types.Task, plan types.Plan) string {
+	summary := utils.FirstLine(task.Description)
+	if plan.Summary != "" {
+		summary = utils.FirstLine(plan.Summary)
+	}
+
+	return fmt.Sprintf("%s\n\nPatchdock task %s", summary, task.ID)
 }
 
 func (p *Pipeline) agentSpec(agentFile string) stage.AgentSpec {

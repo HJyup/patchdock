@@ -11,7 +11,6 @@ import (
 const (
 	summaryFile      = "run.md"
 	recordFile       = "run.json"
-	patchFile        = "workspace.patch"
 	streamFile       = "stdout.log"
 	failedOutputFile = "failed-output.json"
 )
@@ -62,10 +61,6 @@ func (l *Logger) WriteRun(rec *Record) error {
 		l.writeFile(summaryFile, renderRun(rec)),
 		l.writeFile(recordFile, encoded),
 	)
-}
-
-func (l *Logger) WritePatch(diff string) error {
-	return l.writeFile(patchFile, []byte(diff))
 }
 
 func (l *Logger) WriteFailedOutput(raw []byte) error {

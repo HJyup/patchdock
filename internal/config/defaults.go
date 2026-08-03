@@ -7,6 +7,7 @@ const (
 	DefaultTokenBudget   = 100000
 	DefaultMaxContainers = 4
 	DefaultRetriesMax    = 3
+	DefaultBranchPrefix  = "patchdock"
 )
 
 func Defaults() Config {
@@ -18,6 +19,9 @@ func Defaults() Config {
 		},
 		Retries: Retries{
 			Max: DefaultRetriesMax,
+		},
+		Git: Git{
+			BranchPrefix: DefaultBranchPrefix,
 		},
 	}
 }

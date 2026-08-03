@@ -71,8 +71,8 @@ func renderFooter(rec *Record) string {
 	if rec.Patch.Files == 0 {
 		return "No file changes · raw container stream in `stdout.log`\n"
 	}
-	return fmt.Sprintf("`%s` · %s, +%d -%d · raw container stream in `stdout.log`\n",
-		patchFile, utils.Plural(rec.Patch.Files, "file"), rec.Patch.Additions, rec.Patch.Deletions)
+	return fmt.Sprintf(" %s, +%d -%d · raw container stream in `stdout.log`\n",
+		utils.Plural(rec.Patch.Files, "file"), rec.Patch.Additions, rec.Patch.Deletions)
 }
 
 func outcomeWord(rec *Record) string {

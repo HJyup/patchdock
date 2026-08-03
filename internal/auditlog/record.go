@@ -17,6 +17,7 @@ type Record struct {
 	StartedAt time.Time  `json:"started_at"`
 	Duration  string     `json:"duration"`
 	Patch     PatchStat  `json:"patch"`
+	Branch    string     `json:"branch,omitempty"`
 }
 
 type Attempt struct {

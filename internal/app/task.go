@@ -106,6 +106,7 @@ func RunTask(ctx context.Context, prompt string) error {
 	progress.Summary(
 		fmt.Sprintf("Pipeline finished successfully · %s", utils.Plural(outcome.Attempts, "attempt")),
 		logger.LogDir)
+
 	return nil
 }
 

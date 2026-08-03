@@ -20,7 +20,6 @@ type Pipeline struct {
 }
 
 type Outcome struct {
-	TaskID   string
 	Attempts int
 	Accepted bool
 }
@@ -46,7 +45,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 	defer dir.Cleanup()
 
-	out = &Outcome{TaskID: task.ID}
+	out = &Outcome{}
 	history := newHistory()
 
 	audit := newAuditRun(p.logger, task)

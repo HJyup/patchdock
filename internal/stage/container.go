@@ -7,19 +7,19 @@ import (
 	"github.com/HJyup/patchdock/internal/docker"
 )
 
-type mountSet struct {
+type stageMounts struct {
 	mounts  []docker.Mount
 	claimed map[string]struct{}
 }
 
-func newMountSet(capacity int) *mountSet {
-	return &mountSet{
+func NewStageMounts(capacity int) *stageMounts {
+	return &stageMounts{
 		mounts:  make([]docker.Mount, 0, capacity),
 		claimed: make(map[string]struct{}, capacity),
 	}
 }
 
-func (m *mountSet) add(mounts ...docker.Mount) error {
+func (m *stageMounts) add(mounts ...docker.Mount) error {
 	for _, mount := range mounts {
 		if _, taken := m.claimed[mount.Target]; taken {
 			return fmt.Errorf("mount target %q is already claimed", mount.Target)
@@ -54,7 +54,7 @@ func (r *Runner) containerSpec(op runOptions, agent AgentSpec) (docker.RunSpec, 
 
 func (r *Runner) containerMounts(op runOptions) ([]docker.Mount, error) {
 	credentials := r.options.Credentials.Mounts
-	set := newMountSet(len(op.mounts) + len(credentials) + 2)
+	set := NewStageMounts(len(op.mounts) + len(credentials) + 2)
 
 	if err := set.add(
 		docker.Mount{Source: op.dir, Target: ioPath, ReadOnly: false},

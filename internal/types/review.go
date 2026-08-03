@@ -1,6 +1,6 @@
 package types
 
-import "github.com/HJyup/patchdock/internal/id"
+import "github.com/HJyup/patchdock/internal/utils"
 
 // Review is the reviewer stage's output for one ExecutionResult.
 // Decision is the one agent-authored field the runtime branches on
@@ -33,7 +33,7 @@ const (
 
 func NewReview(r Review) (Review, error) {
 	if r.ID == "" {
-		r.ID = id.New("review")
+		r.ID = utils.NewID("review")
 	}
 	if err := r.validate(); err != nil {
 		return Review{}, err

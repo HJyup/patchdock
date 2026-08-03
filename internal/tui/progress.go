@@ -21,6 +21,14 @@ const (
 	fallbackCols = 80
 )
 
+const (
+	sucessSign = "✔"
+	rejectSign = "✖"
+	retrySign  = "↻"
+	lineSign   = "▸"
+	arrowSign  = "→"
+)
+
 // Progress is the whole surface the rest of patchdock sees. Every method is
 // safe to call from any goroutine: on the live path they become messages to the
 // bubbletea program, which is the only thing that writes to the terminal
@@ -80,7 +88,7 @@ func New(out io.Writer) *Progress {
 // Header names the run before any step opens, so a long pipeline is
 // identifiable while it is still going
 func (p *Progress) Header(title, detail string) {
-	line := "▸ " + p.styles.title.Render(title)
+	line := fmt.Sprintf("%v %v", lineSign, p.styles.title.Render(title))
 	if detail != "" {
 		line += "  " + detail
 	}
@@ -107,7 +115,7 @@ func (p *Progress) Start(label string) {
 		p.program.Send(startMsg{label: label})
 		return
 	}
-	fmt.Fprintf(p.out, "→ %s\n", strings.TrimRight(label, " "))
+	fmt.Fprintf(p.out, "%v %s\n", arrowSign, strings.TrimRight(label, " "))
 }
 
 // Detail replaces the activity line under the active step. It is dropped off a
@@ -131,9 +139,9 @@ func (p *Progress) Finish(note string, err error) {
 		note = ""
 	}
 
-	mark := p.styles.green.Render("✔")
+	mark := p.styles.green.Render(sucessSign)
 	if err != nil {
-		mark = p.styles.red.Render("✖")
+		mark = p.styles.red.Render(rejectSign)
 	}
 	p.commit(note, mark)
 }
@@ -141,7 +149,7 @@ func (p *Progress) Finish(note string, err error) {
 // FinishRetry closes a step that ran cleanly but whose verdict sends the
 // pipeline round again. A tick here would read as "all good"
 func (p *Progress) FinishRetry(note string) {
-	p.commit(note, p.styles.amber.Render("↻"))
+	p.commit(note, p.styles.amber.Render(retrySign))
 }
 
 // Summary prints the closing lines of a run. It runs after Close, once the
@@ -161,7 +169,7 @@ func (p *Progress) Muted(text string) string {
 // terminal. Safe to call more than once
 func (p *Progress) Close() {
 	p.closeOnce.Do(func() {
-		p.commit("interrupted", p.styles.red.Render("✖"))
+		p.commit("interrupted", p.styles.red.Render(rejectSign))
 
 		p.mu.Lock()
 		program, running := p.program, p.running

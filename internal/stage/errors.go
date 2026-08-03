@@ -3,23 +3,21 @@ package stage
 import (
 	"errors"
 	"fmt"
-	"strings"
+)
+
+const (
+	reasonNotJSON  = "is not valid JSON"
+	reasonContract = "violates the contract"
 )
 
 type ErrContainer struct {
-	ExitCode   int64
-	StderrTail []string
+	ExitCode int64
 }
 
 func (e ErrContainer) Error() string {
-	if len(e.StderrTail) == 0 {
-		return fmt.Sprintf("container exited with code %d", e.ExitCode)
-	}
-	return fmt.Sprintf("container exited with code %d, stderr tail:\n%s",
-		e.ExitCode, strings.Join(e.StderrTail, "\n"))
+	return fmt.Sprintf("container exited with code %d", e.ExitCode)
 }
 
-// ErrOutputMissing reports a container that exited 0 without writing output.json
 type ErrOutputMissing struct {
 	Path string
 }
@@ -28,40 +26,22 @@ func (e ErrOutputMissing) Error() string {
 	return fmt.Sprintf("container exited 0 but wrote no output: %s does not exist", e.Path)
 }
 
-// ErrOutputNotJSON reports an output.json whose bytes could not be parsed.
-type ErrOutputNotJSON struct {
-	Err error
-	Raw []byte
+type ErrOutput struct {
+	Reason string
+	Err    error
+	Raw    []byte
 }
 
-func (e ErrOutputNotJSON) Error() string {
-	return fmt.Sprintf("output is not valid JSON: %v", e.Err)
+func (e ErrOutput) Error() string {
+	return fmt.Sprintf("output %s: %v", e.Reason, e.Err)
 }
 
-func (e ErrOutputNotJSON) Unwrap() error { return e.Err }
+func (e ErrOutput) Unwrap() error { return e.Err }
 
-// ErrContractInvalid reports an output that parsed as JSON but failed contract validation.
-type ErrContractInvalid struct {
-	Err error
-	Raw []byte
-}
-
-func (e ErrContractInvalid) Error() string {
-	return fmt.Sprintf("output violates the contract: %v", e.Err)
-}
-
-func (e ErrContractInvalid) Unwrap() error { return e.Err }
-
+// RawOutput returns the bytes behind a rejected output, or nil for any other error
 func RawOutput(err error) []byte {
-	var notJSON ErrOutputNotJSON
-	if errors.As(err, &notJSON) {
-		return notJSON.Raw
+	if e, ok := errors.AsType[ErrOutput](err); ok {
+		return e.Raw
 	}
-
-	var invalid ErrContractInvalid
-	if errors.As(err, &invalid) {
-		return invalid.Raw
-	}
-
 	return nil
 }

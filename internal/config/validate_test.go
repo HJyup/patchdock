@@ -8,6 +8,8 @@ import (
 	"github.com/HJyup/patchdock/internal/types"
 )
 
+const namespaceError = "config.name_space: must be lowercase letters or digits, separated by '.', '_' or '-'"
+
 func validStages() map[types.StageName]string {
 	return map[types.StageName]string{
 		types.StagePlanner:  "planner.ts",
@@ -18,6 +20,7 @@ func validStages() map[types.StageName]string {
 
 func TestValidateAcceptsDefaultsWithStages(t *testing.T) {
 	cfg := Defaults()
+	cfg.Namespace = "test-ns"
 	cfg.Stages = validStages()
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
@@ -26,6 +29,7 @@ func TestValidateAcceptsDefaultsWithStages(t *testing.T) {
 
 func TestValidateAcceptsOptionalCodexConfig(t *testing.T) {
 	cfg := Defaults()
+	cfg.Namespace = "test-ns"
 	cfg.Stages = validStages()
 	cfg.Codex = &CodexConfig{Auth: CodexHostLogin}
 
@@ -51,7 +55,7 @@ func TestLoadCodexConfigIsOptional(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.yml")
-			content := tt.codexYAML + "stages:\n" +
+			content := "name_space: test-ns\n" + tt.codexYAML + "stages:\n" +
 				"  planner: planner.ts\n" +
 				"  executor: executor.ts\n" +
 				"  reviewer: reviewer.ts\n"
@@ -120,15 +124,31 @@ func TestValidateFieldErrors(t *testing.T) {
 			want:   "config.container.timeout: must be >= 0",
 		},
 		{
+			name:   "missing namespace",
+			mutate: func(c *Config) { c.Namespace = "" },
+			want:   namespaceError,
+		},
+		{
+			name:   "namespace with uppercase or spaces",
+			mutate: func(c *Config) { c.Namespace = "My Name" },
+			want:   namespaceError,
+		},
+		{
 			name:   "negative retries",
 			mutate: func(c *Config) { c.Retries.Max = -1 },
-			want:   "config.retries.max: must be >= 0",
+			want:   "config.retries.max: must be >= 1",
+		},
+		{
+			name:   "zero retries runs no attempts",
+			mutate: func(c *Config) { c.Retries.Max = 0 },
+			want:   "config.retries.max: must be >= 1",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Defaults()
+			cfg.Namespace = "test-ns"
 			cfg.Stages = validStages()
 			tt.mutate(&cfg)
 

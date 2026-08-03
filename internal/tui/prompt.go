@@ -15,7 +15,7 @@ var ErrPromptCancelled = errors.New("prompt cancelled")
 const (
 	promptCharLimit = 2000
 	minPromptWidth  = 20
-	promptCue       = "▸ "
+	promptSign      = "▸ "
 )
 
 func Prompt(in io.Reader, out io.Writer) (string, error) {
@@ -50,12 +50,12 @@ type promptModel struct {
 
 func newPromptModel(s styles) promptModel {
 	input := textinput.New()
-	input.Prompt = promptCue
+	input.Prompt = promptSign
 	input.Placeholder = "what should the agent do?"
 	input.CharLimit = promptCharLimit
 	input.PromptStyle = s.accent
 	input.PlaceholderStyle = s.muted
-	input.Width = fallbackCols - ansi.StringWidth(promptCue)
+	input.Width = fallbackCols - ansi.StringWidth(promptSign)
 	input.Focus()
 
 	return promptModel{styles: s, input: input}
@@ -69,7 +69,7 @@ func (m promptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		if msg.Width > 0 {
-			m.input.Width = max(msg.Width-ansi.StringWidth(promptCue)-1, minPromptWidth)
+			m.input.Width = max(msg.Width-ansi.StringWidth(promptSign)-1, minPromptWidth)
 		}
 		return m, nil
 

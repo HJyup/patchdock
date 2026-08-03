@@ -2,6 +2,7 @@ package stage
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 )
 
 type ContainerRunner interface {
-	Run(context.Context, docker.RunSpec) (<-chan docker.LogLine, <-chan docker.Result)
+	Run(context.Context, docker.RunSpec) (<-chan docker.LogLine, <-chan docker.RunResult)
 }
 
 type Limits struct {
@@ -18,17 +19,17 @@ type Limits struct {
 	MaxTokens int
 }
 
-type Spec struct {
+type AgentSpec struct {
 	AgentFile string
 	Limits    Limits
 }
 
 // RunnerOptions holds what every stage in one task run shares
 type RunnerOptions struct {
-	ImageTag    string
-	AgentsDir   string
-	LogWriter   io.Writer
-	Credentials auth.Credentials
+	ImageTag     string
+	PatchdockDir string
+	LogWriter    io.Writer
+	Credentials  auth.Credentials
 	// kinda call-backish from TypeScript. TBH, I don't know how to handle this in GO
 	OnActivity func(activity string)
 }
@@ -46,4 +47,19 @@ type Runner struct {
 
 func NewRunner(containers ContainerRunner, options RunnerOptions) *Runner {
 	return &Runner{containers: containers, options: options}
+}
+
+// Used by other stages to ge the output
+func decodeOutput[T any](raw []byte, stamp func(*T), build func(T) (T, error)) (T, error) {
+	var zero, decoded T
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return zero, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
+	}
+	stamp(&decoded)
+
+	out, err := build(decoded)
+	if err != nil {
+		return zero, ErrOutput{Reason: reasonContract, Err: err, Raw: raw}
+	}
+	return out, nil
 }

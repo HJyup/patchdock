@@ -3,174 +3,112 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"time"
 
 	"github.com/HJyup/patchdock/internal/auditlog"
-	"github.com/HJyup/patchdock/internal/auth"
 	"github.com/HJyup/patchdock/internal/config"
-	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/stage"
 	"github.com/HJyup/patchdock/internal/types"
 	"github.com/HJyup/patchdock/internal/workspace"
 )
 
 type Pipeline struct {
-	cli         *docker.Client
-	cfg         config.Config
-	imageTag    string
-	repoDir     string
-	agentsDir   string
-	maxAttempts int
-	reporter    Reporter
+	cfg      config.Config
+	repoDir  string
+	runner   *stage.Runner
+	logger   *auditlog.Logger
+	reporter Reporter
 }
 
 type Outcome struct {
-	TaskID    string
-	RunDir    string
-	Plan      types.Plan
-	Execution types.ExecutionResult
-	Review    types.Review
-	Attempts  int
-	Accepted  bool
+	Attempts int
+	Accepted bool
 }
 
-func NewPipeline(cli *docker.Client, cfg config.Config, imageTag, repoDir, agentsDir string, reporter Reporter) *Pipeline {
+func New(cfg config.Config, repoDir string, runner *stage.Runner, logger *auditlog.Logger, reporter Reporter) *Pipeline {
 	if reporter == nil {
-		reporter = emptyReporter{}
+		reporter = stubReporter{}
 	}
 
 	return &Pipeline{
-		cli:         cli,
-		cfg:         cfg,
-		imageTag:    imageTag,
-		repoDir:     repoDir,
-		agentsDir:   agentsDir,
-		maxAttempts: cfg.Retries.Max + 1,
-		reporter:    reporter,
+		cfg:      cfg,
+		repoDir:  repoDir,
+		reporter: reporter,
+		runner:   runner,
+		logger:   logger,
 	}
 }
 
 func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err error) {
-	err = p.preflight(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	dir, err := newTaskDir()
+	dir, err := newTemporaryDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize task environment: %w", err)
 	}
 	defer dir.Cleanup()
 
-	runID := fmt.Sprintf("%s-%s", task.ID, time.Now().Format("20060102-150405"))
-	logDir := filepath.Join(p.repoDir, ".patchdock", "logs", runID)
+	out = &Outcome{}
+	history := newHistory()
 
-	logger, err := auditlog.New(logDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize audit logger: %w", err)
-	}
-	defer logger.Close()
+	audit := newAuditRun(p.logger, task)
+	defer func() { audit.Finish(history, out, err) }()
 
-	out = &Outcome{TaskID: task.ID, RunDir: logDir}
-
-	rec := &auditlog.Record{RunID: runID, Task: task, StartedAt: time.Now()}
-	failed, rawKept := "setup", false
-	defer func() {
-		rec.Duration = time.Since(rec.StartedAt).Round(time.Second).String()
-		if err != nil {
-			rec.Failure = &auditlog.Failure{Stage: failed, Message: err.Error(), RawOutput: rawKept}
-		}
-		if writeErr := logger.WriteRun(rec); writeErr != nil {
-			fmt.Fprintf(logger, "audit: failed to write run record: %v\n", writeErr)
-		}
-	}()
-
-	keepRawOutput := func(stageErr error) {
-		raw := stage.RawOutput(stageErr)
-		if len(raw) == 0 {
-			return
-		}
-		if writeErr := logger.WriteFailedOutput(raw); writeErr != nil {
-			fmt.Fprintf(logger, "audit: failed to archive raw output: %v\n", writeErr)
-			return
-		}
-		rawKept = true
-	}
-
-	cred, err := auth.LoadCodex(p.cfg.Codex)
-	if err != nil {
-		return out, fmt.Errorf("load Codex credentials: %w", err)
-	}
-
-	stages := stage.NewRunner(p.cli, stage.RunnerOptions{
-		ImageTag:    p.imageTag,
-		AgentsDir:   p.agentsDir,
-		LogWriter:   logger,
-		Credentials: cred,
-		OnActivity:  p.reporter.StageActivity,
-	})
-
-	failed = string(types.StagePlanner)
 	p.reporter.StageStarted(types.StagePlanner, 0)
-	plan, err := stages.RunPlanner(ctx, stage.PlannerRequest{
-		Spec:        p.stageSpec(p.cfg.Stages[types.StagePlanner]),
+
+	plan, err := p.runner.RunPlanner(ctx, stage.PlannerRequest{
+		Agent:       p.agentSpec(p.cfg.Stages[types.StagePlanner]),
 		Input:       stage.PlannerInput{Task: task},
 		ExchangeDir: dir.PlannerPath(),
 		RepoDir:     p.repoDir,
 	})
+
 	p.reporter.StageFinished(types.StagePlanner, 0, "", err)
 	if err != nil {
-		keepRawOutput(err)
+		audit.Failed(types.StagePlanner, err)
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
 
-	out.Plan = plan
-	rec.Plan = plan
-	history := newHistory()
+	audit.Planned(plan)
 
 	wks, err := workspace.NewWorkspace(p.repoDir, dir.WorkspacePath())
 	if err != nil {
 		return out, fmt.Errorf("failed to create a workspace: %w", err)
 	}
 
-	for attempt := 1; attempt <= p.maxAttempts; attempt++ {
-		failed = string(types.StageExecutor)
+	for attempt := 1; attempt <= p.cfg.Retries.Max; attempt++ {
 		p.reporter.StageStarted(types.StageExecutor, attempt)
-		res, err := stages.RunExecutor(ctx, stage.ExecutorRequest{
-			Spec: p.stageSpec(p.cfg.Stages[types.StageExecutor]),
+
+		res, err := p.runner.RunExecutor(ctx, stage.ExecutorRequest{
+			Agent: p.agentSpec(p.cfg.Stages[types.StageExecutor]),
 			Input: stage.ExecutorInput{
 				Plan:    plan,
 				Reviews: history.Reviews,
 			},
 			ExchangeDir:  dir.ExecutorPath(attempt),
 			WorkspaceDir: wks.Dir,
-			Attempt:      stage.Attempt{Number: attempt, Maximum: p.maxAttempts},
+			Attempt:      stage.Attempt{Number: attempt, Maximum: p.cfg.Retries.Max},
 		})
+
 		p.reporter.StageFinished(types.StageExecutor, attempt, string(res.Status), err)
 		if err != nil {
-			keepRawOutput(err)
+			audit.Failed(types.StageExecutor, err)
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
 
 		history.AddExecution(res)
-		out.Execution = res
-		rec.Attempts = append(rec.Attempts, auditlog.Attempt{Number: attempt, Execution: res})
 
 		diff, err := wks.Diff(ctx)
 		if err != nil {
+			audit.Failed(types.StageExecutor, err)
 			return out, fmt.Errorf("executor stage (failed computing diffs): %w", err)
 		}
 
-		if err := logger.WritePatch(diff); err != nil {
+		if err := audit.Patched(diff); err != nil {
 			return out, fmt.Errorf("write workspace patch: %w", err)
 		}
-		rec.Patch = auditlog.StatPatch(diff)
 
-		failed = string(types.StageReviewer)
 		p.reporter.StageStarted(types.StageReviewer, attempt)
-		rev, err := stages.RunReviewer(ctx, stage.ReviewerRequest{
-			Spec: p.stageSpec(p.cfg.Stages[types.StageReviewer]),
+
+		rev, err := p.runner.RunReviewer(ctx, stage.ReviewerRequest{
+			Agent: p.agentSpec(p.cfg.Stages[types.StageReviewer]),
 			Input: stage.ReviewerInput{
 				Plan:             plan,
 				Patch:            diff,
@@ -179,22 +117,20 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			},
 			ExchangeDir:  dir.ReviewPath(attempt),
 			WorkspaceDir: wks.Dir,
-			Attempt:      stage.Attempt{Number: attempt, Maximum: p.maxAttempts},
+			Attempt:      stage.Attempt{Number: attempt, Maximum: p.cfg.Retries.Max},
 		})
+
 		p.reporter.StageFinished(types.StageReviewer, attempt, string(rev.Decision), err)
 		if err != nil {
-			keepRawOutput(err)
+			audit.Failed(types.StageReviewer, err)
 			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
 
 		history.AddReview(rev)
-		out.Review = rev
 		out.Attempts = attempt
-		rec.Attempts[len(rec.Attempts)-1].Review = rev
 
 		if rev.Decision == types.ReviewAccept {
 			out.Accepted = true
-			rec.Accepted = true
 			break
 		}
 	}
@@ -202,29 +138,12 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	return out, nil
 }
 
-func (p *Pipeline) stageSpec(agentFile string) stage.Spec {
-	return stage.Spec{
+func (p *Pipeline) agentSpec(agentFile string) stage.AgentSpec {
+	return stage.AgentSpec{
 		AgentFile: agentFile,
 		Limits: stage.Limits{
 			Timeout:   p.cfg.Container.Timeout.Duration(),
 			MaxTokens: p.cfg.Container.TokenBudget,
 		},
 	}
-}
-
-func (p *Pipeline) preflight(ctx context.Context) error {
-	if p.maxAttempts < 1 {
-		return fmt.Errorf("retries.max must be >= 0, giving at least one attempt (got %d)", p.maxAttempts-1)
-	}
-
-	exists, err := p.cli.ImageExists(ctx, p.imageTag)
-	if err != nil {
-		return err
-	}
-
-	if !exists {
-		return fmt.Errorf("image %q not found — build it first", p.imageTag)
-	}
-
-	return nil
 }

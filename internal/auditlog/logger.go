@@ -17,11 +17,14 @@ const (
 )
 
 type Logger struct {
-	logDir  string
-	logFile *os.File
+	LogID         string // still don't know whether it's the best way to indicate, but since we have logger per pipeline, it can work
+	LogDir        string
+	logStreamFile *os.File
 }
 
-func New(logDir string) (*Logger, error) {
+func New(id string, dir string) (*Logger, error) {
+	logDir := filepath.Join(dir, "logs", id)
+
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed creating log directory: %w", err)
 	}
@@ -33,17 +36,14 @@ func New(logDir string) (*Logger, error) {
 	}
 
 	return &Logger{
-		logDir:  logDir,
-		logFile: file,
+		LogDir:        filepath.Join(dir, "logs", id),
+		LogID:         id,
+		logStreamFile: file,
 	}, nil
 }
 
 func (l *Logger) Write(p []byte) (n int, err error) {
-	if l.logFile == nil {
-		return 0, fmt.Errorf("cannot write: log file descriptor is not open")
-	}
-
-	n, err = l.logFile.Write(p)
+	n, err = l.logStreamFile.Write(p)
 	if err != nil {
 		return n, fmt.Errorf("log write error: %w", err)
 	}
@@ -52,10 +52,6 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 }
 
 func (l *Logger) WriteRun(rec *Record) error {
-	if l.logDir == "" {
-		return fmt.Errorf("cannot write run record: log directory is not initialized")
-	}
-
 	encoded, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode %s: %w", recordFile, err)
@@ -77,18 +73,15 @@ func (l *Logger) WriteFailedOutput(raw []byte) error {
 }
 
 func (l *Logger) writeFile(name string, content []byte) error {
-	if l.logDir == "" {
-		return fmt.Errorf("cannot write %s: log directory is not initialized", name)
-	}
-	if err := os.WriteFile(filepath.Join(l.logDir, name), content, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(l.LogDir, name), content, 0o644); err != nil {
 		return fmt.Errorf("failed to write %s: %w", name, err)
 	}
 	return nil
 }
 
 func (l *Logger) Close() error {
-	if l.logFile != nil {
-		return l.logFile.Close()
+	if l.logStreamFile != nil {
+		return l.logStreamFile.Close()
 	}
 	return nil
 }

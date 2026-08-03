@@ -12,7 +12,7 @@ import (
 
 type BuildSpec struct {
 	ContextDir string
-	Tag        string
+	ImageTag   string
 	Exclude    []string
 }
 
@@ -42,7 +42,7 @@ type LogLine struct {
 	Text   string
 }
 
-type Result struct {
+type RunResult struct {
 	ExitCode int64
 	Err      error
 }
@@ -64,7 +64,7 @@ func NewClient() (*Client, error) {
 
 // Run starts a container from spec and streams its demuxed output.
 // Callers must drain the log channel to completion before reading the result
-func (c *Client) Run(ctx context.Context, spec RunSpec) (<-chan LogLine, <-chan Result) {
+func (c *Client) Run(ctx context.Context, spec RunSpec) (<-chan LogLine, <-chan RunResult) {
 	return run(ctx, c.cli, spec)
 }
 
@@ -72,12 +72,12 @@ func (c *Client) Build(ctx context.Context, spec BuildSpec) (<-chan LogLine, <-c
 	return build(ctx, c.cli, spec)
 }
 
-func (c *Client) ImageExists(ctx context.Context, tag string) (bool, error) {
+func (c *Client) ImageExists(ctx context.Context, imageTag string) (bool, error) {
 	list, err := c.cli.ImageList(ctx, image.ListOptions{
-		Filters: filters.NewArgs(filters.Arg("reference", tag)),
+		Filters: filters.NewArgs(filters.Arg("reference", imageTag)),
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to list images for tag %q: %w", tag, err)
+		return false, fmt.Errorf("failed to list images for tag %q: %w", imageTag, err)
 	}
 
 	return len(list) > 0, nil

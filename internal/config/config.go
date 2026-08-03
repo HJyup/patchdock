@@ -9,7 +9,7 @@ const (
 )
 
 type Config struct {
-	ID        string                     `yaml:"id"`
+	Namespace string                     `yaml:"name_space"`
 	Container Container                  `yaml:"container"`
 	Retries   Retries                    `yaml:"retries"`
 	Codex     *CodexConfig               `yaml:"codex,omitempty"`

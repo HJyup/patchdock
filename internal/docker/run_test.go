@@ -28,7 +28,7 @@ func ensureRunImage(t *testing.T, c *Client) {
 	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM alpine:3\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	logs, res := c.Build(ctx, BuildSpec{ContextDir: dir, Tag: testRunImage})
+	logs, res := c.Build(ctx, BuildSpec{ContextDir: dir, ImageTag: testRunImage})
 	for range logs {
 	}
 	if r := <-res; r.Err != nil {
@@ -37,7 +37,7 @@ func ensureRunImage(t *testing.T, c *Client) {
 }
 
 // collect drains both channels and returns everything.
-func collect(logs <-chan LogLine, res <-chan Result) ([]LogLine, Result) {
+func collect(logs <-chan LogLine, res <-chan RunResult) ([]LogLine, RunResult) {
 	var lines []LogLine
 	for l := range logs {
 		lines = append(lines, l)

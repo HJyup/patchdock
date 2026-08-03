@@ -1,23 +1,16 @@
 package config
 
-import (
-	"time"
-
-	"github.com/HJyup/patchdock/internal/id"
-)
+import "time"
 
 const (
 	DefaultTimeout       = Duration(10 * time.Minute)
 	DefaultTokenBudget   = 100000
 	DefaultMaxContainers = 4
-	DefaultRetriesMax    = 1
+	DefaultRetriesMax    = 3
 )
 
 func Defaults() Config {
-	id := id.New("")
-
 	return Config{
-		ID: id,
 		Container: Container{
 			Timeout:       DefaultTimeout,
 			TokenBudget:   DefaultTokenBudget,

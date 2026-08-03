@@ -18,12 +18,12 @@ type Options struct {
 	Force   bool
 }
 
-type templateFile struct {
+type fileSource struct {
 	src string
 	dst string
 }
 
-var scaffoldFiles = []templateFile{
+var scaffoldFiles = []fileSource{
 	{src: "templates/config.template.yml", dst: "config.yml"},
 	{src: "templates/planner.ts.tmpl", dst: "planner.ts"},
 	{src: "templates/executor.ts.tmpl", dst: "executor.ts"},
@@ -32,45 +32,36 @@ var scaffoldFiles = []templateFile{
 }
 
 func Init(opts Options) error {
-	repoDir := opts.RepoDir
-	if repoDir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("resolve current directory: %w", err)
-		}
-		repoDir = cwd
-	}
-
-	stats, err := os.Stat(repoDir)
+	stats, err := os.Stat(opts.RepoDir)
 	if err != nil {
-		return fmt.Errorf("stat repo dir %s: %w", repoDir, err)
+		return fmt.Errorf("failed to get stats for %s: %w", opts.RepoDir, err)
 	}
 	if !stats.IsDir() {
-		return fmt.Errorf("repo dir %s is not a directory", repoDir)
+		return fmt.Errorf("%s is not a directory", opts.RepoDir)
 	}
 
-	phdDir := filepath.Join(repoDir, ".patchdock")
-	if stats, err := os.Stat(phdDir); err == nil {
+	patchdockDir := filepath.Join(opts.RepoDir, ".patchdock")
+	if stats, err := os.Stat(patchdockDir); err == nil {
 		if !stats.IsDir() {
-			return fmt.Errorf("%s exists and is not a directory", phdDir)
+			return fmt.Errorf("%s exists and is not a directory", patchdockDir)
 		}
 		if opts.Force {
-			if err := os.RemoveAll(phdDir); err != nil {
-				return fmt.Errorf("overwrite %s: %w", phdDir, err)
+			if err := os.RemoveAll(patchdockDir); err != nil {
+				return fmt.Errorf("failed to overwrite %s: %w", patchdockDir, err)
 			}
 		} else {
-			return fmt.Errorf("%s: %w", phdDir, ErrAlreadyExists)
+			return fmt.Errorf("%s: %w", patchdockDir, ErrAlreadyExists)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("stat %s: %w", phdDir, err)
+		return fmt.Errorf("stat %s: %w", patchdockDir, err)
 	}
 
-	if err := os.Mkdir(phdDir, 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", phdDir, err)
+	if err := os.Mkdir(patchdockDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create %s: %w", patchdockDir, err)
 	}
 
 	for _, file := range scaffoldFiles {
-		if err = processFile(phdDir, file); err != nil {
+		if err = writeTemplateFile(patchdockDir, file); err != nil {
 			return err
 		}
 	}
@@ -78,7 +69,7 @@ func Init(opts Options) error {
 	return nil
 }
 
-func processFile(folder string, file templateFile) error {
+func writeTemplateFile(folder string, file fileSource) error {
 	data, err := templates.ReadFile(file.src)
 	if err != nil {
 		return fmt.Errorf("read embedded template %s: %w", file.src, err)

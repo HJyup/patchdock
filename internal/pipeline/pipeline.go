@@ -3,7 +3,6 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/HJyup/patchdock/internal/auditlog"
 	"github.com/HJyup/patchdock/internal/config"
@@ -50,33 +49,9 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	out = &Outcome{TaskID: task.ID}
 	history := newHistory()
 
-	rec := &auditlog.Record{RunID: p.logger.LogID, Task: task, StartedAt: time.Now()}
-	failed, rawKept := "setup", false
-	defer func() {
-		rec.Attempts = history.auditAttempts()
-		rec.Accepted = out.Accepted
-		rec.Duration = time.Since(rec.StartedAt).Round(time.Second).String()
-		if err != nil {
-			rec.Failure = &auditlog.Failure{Stage: failed, Message: err.Error(), RawOutput: rawKept}
-		}
-		if writeErr := p.logger.WriteRun(rec); writeErr != nil {
-			fmt.Fprintf(p.logger, "audit: failed to write run record: %v\n", writeErr)
-		}
-	}()
+	audit := newAuditRun(p.logger, task)
+	defer func() { audit.Finish(history, out, err) }()
 
-	keepRawOutput := func(stageErr error) {
-		raw := stage.RawOutput(stageErr)
-		if len(raw) == 0 {
-			return
-		}
-		if writeErr := p.logger.WriteFailedOutput(raw); writeErr != nil {
-			fmt.Fprintf(p.logger, "audit: failed to archive raw output: %v\n", writeErr)
-			return
-		}
-		rawKept = true
-	}
-
-	failed = string(types.StagePlanner)
 	p.reporter.StageStarted(types.StagePlanner, 0)
 
 	plan, err := p.runner.RunPlanner(ctx, stage.PlannerRequest{
@@ -88,11 +63,11 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 
 	p.reporter.StageFinished(types.StagePlanner, 0, "", err)
 	if err != nil {
-		keepRawOutput(err)
+		audit.Failed(types.StagePlanner, err)
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
 
-	rec.Plan = plan
+	audit.Planned(plan)
 
 	wks, err := workspace.NewWorkspace(p.repoDir, dir.WorkspacePath())
 	if err != nil {
@@ -100,7 +75,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 
 	for attempt := 1; attempt <= p.cfg.Retries.Max; attempt++ {
-		failed = string(types.StageExecutor)
 		p.reporter.StageStarted(types.StageExecutor, attempt)
 
 		res, err := p.runner.RunExecutor(ctx, stage.ExecutorRequest{
@@ -116,7 +90,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 
 		p.reporter.StageFinished(types.StageExecutor, attempt, string(res.Status), err)
 		if err != nil {
-			keepRawOutput(err)
+			audit.Failed(types.StageExecutor, err)
 			return out, fmt.Errorf("executor stage: %w", err)
 		}
 
@@ -124,15 +98,14 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 
 		diff, err := wks.Diff(ctx)
 		if err != nil {
+			audit.Failed(types.StageExecutor, err)
 			return out, fmt.Errorf("executor stage (failed computing diffs): %w", err)
 		}
 
-		if err := p.logger.WritePatch(diff); err != nil {
+		if err := audit.Patched(diff); err != nil {
 			return out, fmt.Errorf("write workspace patch: %w", err)
 		}
-		rec.Patch = auditlog.StatPatch(diff)
 
-		failed = string(types.StageReviewer)
 		p.reporter.StageStarted(types.StageReviewer, attempt)
 
 		rev, err := p.runner.RunReviewer(ctx, stage.ReviewerRequest{
@@ -150,7 +123,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 
 		p.reporter.StageFinished(types.StageReviewer, attempt, string(rev.Decision), err)
 		if err != nil {
-			keepRawOutput(err)
+			audit.Failed(types.StageReviewer, err)
 			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
 

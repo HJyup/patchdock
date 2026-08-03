@@ -1,10 +1,11 @@
-package stage
+package events
 
 import (
 	"fmt"
 	"strings"
 )
 
+// Should be moved somewhere, since we define it here but it's mainly the problem of TUI
 const maxActivity = 140
 
 func activityOf(event map[string]any) string {

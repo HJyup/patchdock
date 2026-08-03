@@ -37,7 +37,7 @@ func ensureRunImage(t *testing.T, c *Client) {
 }
 
 // collect drains both channels and returns everything.
-func collect(logs <-chan LogLine, res <-chan Result) ([]LogLine, Result) {
+func collect(logs <-chan LogLine, res <-chan RunResult) ([]LogLine, RunResult) {
 	var lines []LogLine
 	for l := range logs {
 		lines = append(lines, l)

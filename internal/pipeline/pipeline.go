@@ -54,7 +54,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	p.reporter.StageStarted(types.StagePlanner, 0)
 
 	plan, err := p.runner.RunPlanner(ctx, stage.PlannerRequest{
-		Spec:        p.stageSpec(p.cfg.Stages[types.StagePlanner]),
+		Agent:       p.agentSpec(p.cfg.Stages[types.StagePlanner]),
 		Input:       stage.PlannerInput{Task: task},
 		ExchangeDir: dir.PlannerPath(),
 		RepoDir:     p.repoDir,
@@ -77,7 +77,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		p.reporter.StageStarted(types.StageExecutor, attempt)
 
 		res, err := p.runner.RunExecutor(ctx, stage.ExecutorRequest{
-			Spec: p.stageSpec(p.cfg.Stages[types.StageExecutor]),
+			Agent: p.agentSpec(p.cfg.Stages[types.StageExecutor]),
 			Input: stage.ExecutorInput{
 				Plan:    plan,
 				Reviews: history.Reviews,
@@ -108,7 +108,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		p.reporter.StageStarted(types.StageReviewer, attempt)
 
 		rev, err := p.runner.RunReviewer(ctx, stage.ReviewerRequest{
-			Spec: p.stageSpec(p.cfg.Stages[types.StageReviewer]),
+			Agent: p.agentSpec(p.cfg.Stages[types.StageReviewer]),
 			Input: stage.ReviewerInput{
 				Plan:             plan,
 				Patch:            diff,
@@ -138,8 +138,8 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	return out, nil
 }
 
-func (p *Pipeline) stageSpec(agentFile string) stage.Spec {
-	return stage.Spec{
+func (p *Pipeline) agentSpec(agentFile string) stage.AgentSpec {
+	return stage.AgentSpec{
 		AgentFile: agentFile,
 		Limits: stage.Limits{
 			Timeout:   p.cfg.Container.Timeout.Duration(),

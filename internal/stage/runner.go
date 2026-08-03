@@ -11,7 +11,7 @@ import (
 )
 
 type ContainerRunner interface {
-	Run(context.Context, docker.RunSpec) (<-chan docker.LogLine, <-chan docker.Result)
+	Run(context.Context, docker.RunSpec) (<-chan docker.LogLine, <-chan docker.RunResult)
 }
 
 type Limits struct {
@@ -19,7 +19,7 @@ type Limits struct {
 	MaxTokens int
 }
 
-type Spec struct {
+type AgentSpec struct {
 	AgentFile string
 	Limits    Limits
 }

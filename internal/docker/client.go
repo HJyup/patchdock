@@ -42,7 +42,7 @@ type LogLine struct {
 	Text   string
 }
 
-type Result struct {
+type RunResult struct {
 	ExitCode int64
 	Err      error
 }
@@ -64,7 +64,7 @@ func NewClient() (*Client, error) {
 
 // Run starts a container from spec and streams its demuxed output.
 // Callers must drain the log channel to completion before reading the result
-func (c *Client) Run(ctx context.Context, spec RunSpec) (<-chan LogLine, <-chan Result) {
+func (c *Client) Run(ctx context.Context, spec RunSpec) (<-chan LogLine, <-chan RunResult) {
 	return run(ctx, c.cli, spec)
 }
 

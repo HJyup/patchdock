@@ -17,7 +17,7 @@ type ReviewerInput struct {
 }
 
 type ReviewerRequest struct {
-	Spec         Spec
+	Agent        AgentSpec
 	Input        ReviewerInput
 	ExchangeDir  string
 	WorkspaceDir string
@@ -34,7 +34,7 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 		mounts = append(mounts, docker.Mount{Source: req.WorkspaceDir, Target: workspacePath, ReadOnly: true})
 	}
 
-	raw, err := r.runStage(ctx, req.Spec, runOptions{
+	raw, err := r.runStage(ctx, req.Agent, runOptions{
 		stage:       types.StageReviewer,
 		taskID:      req.Input.Plan.TaskID,
 		dir:         req.ExchangeDir,

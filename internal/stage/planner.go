@@ -12,11 +12,10 @@ type PlannerInput struct {
 }
 
 type PlannerRequest struct {
-	Spec        Spec
+	Agent       AgentSpec
 	Input       PlannerInput
 	ExchangeDir string
 	RepoDir     string
-	Attempt     Attempt
 }
 
 func (r *Runner) RunPlanner(ctx context.Context, req PlannerRequest) (types.Plan, error) {
@@ -25,13 +24,11 @@ func (r *Runner) RunPlanner(ctx context.Context, req PlannerRequest) (types.Plan
 		mounts = append(mounts, docker.Mount{Source: req.RepoDir, Target: repoPath, ReadOnly: true})
 	}
 
-	raw, err := r.runStage(ctx, req.Spec, runOptions{
-		stage:       types.StagePlanner,
-		taskID:      req.Input.Task.ID,
-		dir:         req.ExchangeDir,
-		mounts:      mounts,
-		attempt:     req.Attempt.Number,
-		maxAttempts: req.Attempt.Maximum,
+	raw, err := r.runStage(ctx, req.Agent, runOptions{
+		stage:  types.StagePlanner,
+		taskID: req.Input.Task.ID,
+		dir:    req.ExchangeDir,
+		mounts: mounts,
 	}, req.Input)
 	if err != nil {
 		return types.Plan{}, err

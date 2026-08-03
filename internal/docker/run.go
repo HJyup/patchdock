@@ -47,8 +47,8 @@ func envSlice(env map[string]string) []string {
 	return out
 }
 
-func run(ctx context.Context, cli *client.Client, spec RunSpec) (<-chan LogLine, <-chan Result) {
-	logs, res := make(chan LogLine), make(chan Result, 1)
+func run(ctx context.Context, cli *client.Client, spec RunSpec) (<-chan LogLine, <-chan RunResult) {
+	logs, res := make(chan LogLine), make(chan RunResult, 1)
 
 	go func() {
 		defer close(logs)
@@ -62,11 +62,11 @@ func run(ctx context.Context, cli *client.Client, spec RunSpec) (<-chan LogLine,
 
 		for _, m := range spec.Mounts {
 			if !filepath.IsAbs(m.Source) {
-				res <- Result{Err: fmt.Errorf("mount source %q must be an absolute path", m.Source)}
+				res <- RunResult{Err: fmt.Errorf("mount source %q must be an absolute path", m.Source)}
 				return
 			}
 			if _, err := os.Stat(m.Source); err != nil {
-				res <- Result{Err: fmt.Errorf("mount source %q: %w", m.Source, err)}
+				res <- RunResult{Err: fmt.Errorf("mount source %q: %w", m.Source, err)}
 				return
 			}
 		}
@@ -94,7 +94,7 @@ func run(ctx context.Context, cli *client.Client, spec RunSpec) (<-chan LogLine,
 			},
 			nil, nil, "")
 		if err != nil {
-			res <- Result{Err: fmt.Errorf("failed to create a container: %w", err)}
+			res <- RunResult{Err: fmt.Errorf("failed to create a container: %w", err)}
 			return
 		}
 
@@ -102,13 +102,13 @@ func run(ctx context.Context, cli *client.Client, spec RunSpec) (<-chan LogLine,
 		defer cli.ContainerRemove(cleanupCtx, resp.ID, container.RemoveOptions{Force: true})
 
 		if err = cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-			res <- Result{Err: fmt.Errorf("failed to start a container: %w", err)}
+			res <- RunResult{Err: fmt.Errorf("failed to start a container: %w", err)}
 			return
 		}
 
 		out, err := cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true, Follow: true})
 		if err != nil {
-			res <- Result{Err: fmt.Errorf("failed to retrieve logs: %w", err)}
+			res <- RunResult{Err: fmt.Errorf("failed to retrieve logs: %w", err)}
 			return
 		}
 		defer out.Close()
@@ -118,21 +118,21 @@ func run(ctx context.Context, cli *client.Client, spec RunSpec) (<-chan LogLine,
 
 		if _, err := stdcopy.StdCopy(stdoutW, stderrW, out); err != nil {
 			if ctx.Err() != nil {
-				res <- Result{Err: ctx.Err()}
+				res <- RunResult{Err: ctx.Err()}
 				return
 			}
-			res <- Result{Err: fmt.Errorf("log stream error: %w", err)}
+			res <- RunResult{Err: fmt.Errorf("log stream error: %w", err)}
 			return
 		}
 
 		statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 		select {
 		case status := <-statusCh:
-			res <- Result{ExitCode: status.StatusCode}
+			res <- RunResult{ExitCode: status.StatusCode}
 		case err := <-errCh:
-			res <- Result{Err: fmt.Errorf("failed container run: %w", err)}
+			res <- RunResult{Err: fmt.Errorf("failed container run: %w", err)}
 		case <-ctx.Done():
-			res <- Result{Err: ctx.Err()}
+			res <- RunResult{Err: ctx.Err()}
 		}
 	}()
 

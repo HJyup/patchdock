@@ -13,7 +13,7 @@ type ExecutorInput struct {
 }
 
 type ExecutorRequest struct {
-	Spec         Spec
+	Agent        AgentSpec
 	Input        ExecutorInput
 	ExchangeDir  string
 	WorkspaceDir string
@@ -26,7 +26,7 @@ func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.Ex
 		mounts = append(mounts, docker.Mount{Source: req.WorkspaceDir, Target: workspacePath, ReadOnly: false})
 	}
 
-	raw, err := r.runStage(ctx, req.Spec, runOptions{
+	raw, err := r.runStage(ctx, req.Agent, runOptions{
 		stage:       types.StageExecutor,
 		taskID:      req.Input.Plan.TaskID,
 		dir:         req.ExchangeDir,

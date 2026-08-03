@@ -7,10 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/HJyup/patchdock/internal/auditlog"
+	"github.com/HJyup/patchdock/internal/auth"
 	"github.com/HJyup/patchdock/internal/config"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/pipeline"
+	"github.com/HJyup/patchdock/internal/stage"
 	"github.com/HJyup/patchdock/internal/tui"
 	"github.com/HJyup/patchdock/internal/types"
 	"github.com/HJyup/patchdock/internal/utils"
@@ -33,8 +37,8 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("check %s: %w", patchdockDir, err)
 	}
 
-	patchdockCfgFile := filepath.Join(patchdockDir, "config.yml")
-	patchdockCfg, err := config.Load(patchdockCfgFile)
+	cfgFile := filepath.Join(patchdockDir, "config.yml")
+	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		return fmt.Errorf("%w - edit the file, or regenerate the scaffold with `dock init --force` (overwrites your agent files)", err)
 	}
@@ -50,7 +54,7 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("invalid task: %w", err)
 	}
 
-	imageTag := fmt.Sprintf("%s-%s", imageTagPrefix, patchdockCfg.Namespace)
+	imageTag := fmt.Sprintf("%s-%s", imageTagPrefix, cfg.Namespace)
 	found, err := cli.ImageExists(ctx, imageTag)
 	if err != nil {
 		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", imageTag, err)
@@ -66,26 +70,43 @@ func RunTask(ctx context.Context, prompt string) error {
 		}
 	}
 
-	p := pipeline.New(cli, patchdockCfg, imageTag, repoDir, patchdockDir, tui.NewReporter(progress))
+	runID := fmt.Sprintf("%s-%s", task.ID, time.Now().Format("20060102-150405"))
+	logger, err := auditlog.New(runID, patchdockDir)
+	if err != nil {
+		return fmt.Errorf("failed to initialise the logger file: %w", err)
+	}
+	defer logger.Close()
+
+	cred, err := auth.LoadCodex(cfg.Codex)
+	if err != nil {
+		return fmt.Errorf("load Codex credentials: %w", err)
+	}
+
+	reporter := tui.NewReporter(progress)
+	runner := stage.NewRunner(cli, stage.RunnerOptions{
+		ImageTag:     imageTag,
+		PatchdockDir: patchdockDir,
+		LogWriter:    logger,
+		Credentials:  cred,
+		OnActivity:   reporter.StageActivity,
+	})
+
+	p := pipeline.New(cfg, repoDir, runner, logger, reporter)
 	outcome, err := p.Run(ctx, task)
 	progress.Close()
 
 	if err != nil {
-		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, runReport())
+		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, logger.LogDir)
 	}
 
 	if !outcome.Accepted {
-		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, runReport())
+		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, logger.LogDir)
 	}
 
 	progress.Summary(
 		fmt.Sprintf("Pipeline finished successfully · %s", utils.Plural(outcome.Attempts, "attempt")),
-		runReport())
+		logger.LogDir)
 	return nil
-}
-
-func runReport() string {
-	return filepath.Join(patchdockFile, "logs")
 }
 
 func buildImage(ctx context.Context, cli *docker.Client, imageTag, patchdockDir string, progress *tui.Progress) error {

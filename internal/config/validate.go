@@ -32,8 +32,8 @@ func (c *Config) Validate() error {
 	if c.Container.MaxContainers < 0 {
 		addf("config.container.max_containers: must be >= 0")
 	}
-	if c.Retries.Max < 0 {
-		addf("config.retries.max: must be >= 0")
+	if c.Retries.Max < 1 {
+		addf("config.retries.max: must be >= 1")
 	}
 	if c.Codex != nil {
 		switch c.Codex.Auth {

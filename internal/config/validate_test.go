@@ -136,7 +136,12 @@ func TestValidateFieldErrors(t *testing.T) {
 		{
 			name:   "negative retries",
 			mutate: func(c *Config) { c.Retries.Max = -1 },
-			want:   "config.retries.max: must be >= 0",
+			want:   "config.retries.max: must be >= 1",
+		},
+		{
+			name:   "zero retries runs no attempts",
+			mutate: func(c *Config) { c.Retries.Max = 0 },
+			want:   "config.retries.max: must be >= 1",
 		},
 	}
 

@@ -53,8 +53,8 @@ func (r *Runner) containerSpec(op runOptions, agent AgentSpec) (docker.RunSpec, 
 }
 
 func (r *Runner) containerMounts(op runOptions) ([]docker.Mount, error) {
-	credentials := r.options.Credentials.Mounts
-	set := NewStageMounts(len(op.mounts) + len(credentials) + 2)
+	custom := r.options.CustomMounts
+	set := NewStageMounts(len(op.mounts) + len(custom) + 2)
 
 	if err := set.add(
 		docker.Mount{Source: op.dir, Target: ioPath, ReadOnly: false},
@@ -65,7 +65,7 @@ func (r *Runner) containerMounts(op runOptions) ([]docker.Mount, error) {
 	if err := set.add(op.mounts...); err != nil {
 		return nil, err
 	}
-	if err := set.add(credentials...); err != nil {
+	if err := set.add(custom...); err != nil {
 		return nil, err
 	}
 
@@ -90,9 +90,9 @@ func (r *Runner) containerEnv(op runOptions, agent AgentSpec) (map[string]string
 		env["PATCHDOCK_MAX_ATTEMPTS"] = strconv.Itoa(op.maxAttempts)
 	}
 
-	for key, value := range r.options.Credentials.Env {
+	for key, value := range r.options.CustomEnv {
 		if _, reserved := env[key]; reserved {
-			return nil, fmt.Errorf("credential environment variable %q conflicts with stage environment", key)
+			return nil, fmt.Errorf("environment variable %q conflicts with the reserved stage environment", key)
 		}
 		env[key] = value
 	}

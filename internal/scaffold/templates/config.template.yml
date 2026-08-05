@@ -27,10 +27,13 @@ container:
 retries:
   max: 2
 
-# The generated agents use Codex. host-login reuses the local `codex login`
-# subscription session inside each stage container.
-codex:
-  auth: host-login
+# Host files mounted read-only into every stage container, so the agent can
+# authenticate
+credentials:
+  - host: ~/.codex/auth.json
+    target: /codex-auth/auth.json
+    env:
+      CODEX_HOME: /codex-auth
 
 git:
   branch_prefix: patchdock

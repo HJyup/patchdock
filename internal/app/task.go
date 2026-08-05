@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/HJyup/patchdock/internal/auditlog"
-	"github.com/HJyup/patchdock/internal/auth"
 	"github.com/HJyup/patchdock/internal/config"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/pipeline"
@@ -77,9 +76,9 @@ func RunTask(ctx context.Context, prompt string) error {
 	}
 	defer logger.Close()
 
-	cred, err := auth.LoadCodex(cfg.Codex)
+	credMounts, credEnv, err := resolveCredentials(cfg.Credentials)
 	if err != nil {
-		return fmt.Errorf("load Codex credentials: %w", err)
+		return fmt.Errorf("load credentials: %w", err)
 	}
 
 	reporter := tui.NewReporter(progress)
@@ -87,7 +86,8 @@ func RunTask(ctx context.Context, prompt string) error {
 		ImageTag:     imageTag,
 		PatchdockDir: patchdockDir,
 		LogWriter:    logger,
-		Credentials:  cred,
+		CustomMounts: credMounts,
+		CustomEnv:    credEnv,
 		OnActivity:   reporter.StageActivity,
 	})
 

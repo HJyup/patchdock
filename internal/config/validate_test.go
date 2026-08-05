@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/HJyup/patchdock/internal/types"
@@ -27,35 +28,48 @@ func TestValidateAcceptsDefaultsWithStages(t *testing.T) {
 	}
 }
 
-func TestValidateAcceptsOptionalCodexConfig(t *testing.T) {
+func TestValidateAcceptsCredentials(t *testing.T) {
 	cfg := Defaults()
 	cfg.Namespace = "test-ns"
 	cfg.Stages = validStages()
-	cfg.Codex = &CodexConfig{Auth: CodexHostLogin}
+	cfg.Credentials = []Credential{{
+		Host:   "~/.codex/auth.json",
+		Target: "/codex-auth/auth.json",
+		Env:    map[string]string{"CODEX_HOME": "/codex-auth"},
+	}}
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("valid config rejected: %v", err)
 	}
 }
 
-func TestLoadCodexConfigIsOptional(t *testing.T) {
+func TestLoadCredentialsAreOptional(t *testing.T) {
 	tests := []struct {
-		name      string
-		codexYAML string
-		wantCodex *CodexConfig
+		name  string
+		yaml  string
+		want  []Credential
+		count int
 	}{
 		{name: "omitted"},
 		{
-			name:      "host login",
-			codexYAML: "codex:\n  auth: host-login\n",
-			wantCodex: &CodexConfig{Auth: CodexHostLogin},
+			name: "host file with env",
+			yaml: "credentials:\n" +
+				"  - host: ~/.codex/auth.json\n" +
+				"    target: /codex-auth/auth.json\n" +
+				"    env:\n" +
+				"      CODEX_HOME: /codex-auth\n",
+			want: []Credential{{
+				Host:   "~/.codex/auth.json",
+				Target: "/codex-auth/auth.json",
+				Env:    map[string]string{"CODEX_HOME": "/codex-auth"},
+			}},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.yml")
-			content := "name_space: test-ns\n" + tt.codexYAML + "stages:\n" +
+			content := "name_space: test-ns\n" + tt.yaml + "stages:\n" +
 				"  planner: planner.ts\n" +
 				"  executor: executor.ts\n" +
 				"  reviewer: reviewer.ts\n"
@@ -67,14 +81,8 @@ func TestLoadCodexConfigIsOptional(t *testing.T) {
 			if err != nil {
 				t.Fatalf("load config: %v", err)
 			}
-			if tt.wantCodex == nil {
-				if cfg.Codex != nil {
-					t.Fatalf("unexpected Codex config: %#v", cfg.Codex)
-				}
-				return
-			}
-			if cfg.Codex == nil || cfg.Codex.Auth != tt.wantCodex.Auth {
-				t.Fatalf("Codex config mismatch: got %#v, want %#v", cfg.Codex, tt.wantCodex)
+			if !reflect.DeepEqual(cfg.Credentials, tt.want) {
+				t.Fatalf("credentials mismatch\n got: %#v\nwant: %#v", cfg.Credentials, tt.want)
 			}
 		})
 	}
@@ -109,14 +117,42 @@ func TestValidateFieldErrors(t *testing.T) {
 			want:   "config.stages[deployer]: unknown stage",
 		},
 		{
-			name:   "missing Codex auth",
-			mutate: func(c *Config) { c.Codex = &CodexConfig{} },
-			want:   "config.codex.auth: missing",
+			name:   "credential without a host",
+			mutate: func(c *Config) { c.Credentials = []Credential{{Target: "/codex-auth/auth.json"}} },
+			want:   "config.credentials[0].host: missing",
 		},
 		{
-			name:   "unsupported Codex auth",
-			mutate: func(c *Config) { c.Codex = &CodexConfig{Auth: "unknown"} },
-			want:   "config.codex.auth: unsupported value \"unknown\"",
+			name:   "credential without a target",
+			mutate: func(c *Config) { c.Credentials = []Credential{{Host: "~/.codex/auth.json"}} },
+			want:   "config.credentials[0].target: missing",
+		},
+		{
+			name: "credential target must be absolute",
+			mutate: func(c *Config) {
+				c.Credentials = []Credential{{Host: "~/.codex/auth.json", Target: "codex-auth/auth.json"}}
+			},
+			want: "config.credentials[0].target: must be an absolute container path",
+		},
+		{
+			name: "credential targets must be unique",
+			mutate: func(c *Config) {
+				c.Credentials = []Credential{
+					{Host: "~/.codex/auth.json", Target: "/codex-auth/auth.json"},
+					{Host: "~/.other/auth.json", Target: "/codex-auth/auth.json"},
+				}
+			},
+			want: "config.credentials[1].target: \"/codex-auth/auth.json\" is already mounted",
+		},
+		{
+			name: "credential env names must not be empty",
+			mutate: func(c *Config) {
+				c.Credentials = []Credential{{
+					Host:   "~/.codex/auth.json",
+					Target: "/codex-auth/auth.json",
+					Env:    map[string]string{"": "/codex-auth"},
+				}}
+			},
+			want: "config.credentials[0].env: empty variable name",
 		},
 		{
 			name:   "negative timeout",

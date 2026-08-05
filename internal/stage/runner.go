@@ -6,7 +6,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/HJyup/patchdock/internal/auth"
 	"github.com/HJyup/patchdock/internal/docker"
 )
 
@@ -29,7 +28,8 @@ type RunnerOptions struct {
 	ImageTag     string
 	PatchdockDir string
 	LogWriter    io.Writer
-	Credentials  auth.Credentials
+	CustomMounts []docker.Mount
+	CustomEnv    map[string]string
 	// kinda call-backish from TypeScript. TBH, I don't know how to handle this in GO
 	OnActivity func(activity string)
 }

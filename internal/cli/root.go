@@ -1,11 +1,16 @@
 package cli
 
 import (
+	"errors"
 	"os"
 
 	"github.com/HJyup/patchdock/internal/app"
 	"github.com/spf13/cobra"
 )
+
+// errNotImplemented marks a command whose wiring exists but whose body is still
+// to be written.
+var errNotImplemented = errors.New("not implemented yet")
 
 var rootCmd = &cobra.Command{
 	Use:          "dock",

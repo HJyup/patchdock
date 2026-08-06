@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,21 +16,24 @@ import (
 	"github.com/HJyup/patchdock/internal/transport"
 )
 
-var ReadTimeout = 5 * time.Second
+var (
+	ReadTimeout     = 5 * time.Second
+	ShutdownTimeout = 10 * time.Second
+)
 
-func RunServer(ctx context.Context, dir runtimedir.Dir) {
+func RunServer(ctx context.Context, dir runtimedir.Dir) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	l, err := lock.Acquire(dir.Lock())
 	if err != nil {
 		if errors.Is(err, lock.ErrHeld) {
-			log.Fatalf("daemon already running (lock held on %v)", dir.Lock())
+			return fmt.Errorf("daemon already running (lock held on %s)", dir.Lock())
 		}
-		log.Fatalf("unexpected error while trying to get a lock")
+		return fmt.Errorf("acquire lock %s: %w", dir.Lock(), err)
 	}
 	defer func() {
-		log.Print("Removing lock...")
+		log.Print("releasing lock")
 		l.Release()
 	}()
 
@@ -39,12 +43,14 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) {
 
 	listener, err := transport.Listen(dir.Socket())
 	if err != nil {
-		log.Fatalf("failed to create a connection to sock file")
+		return err
 	}
 	defer listener.Close()
 
-	q := queue(ctx)
-	service := NewService(q, dir)
+	bus := make(chan any)
+	NewQueue(bus).Run(ctx)
+
+	service := NewService(bus, dir)
 	router := NewRouter(service)
 	srv := &http.Server{
 		Handler:           router,
@@ -53,18 +59,22 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("Server is listening on unix sock: %v", dir.Socket())
+		log.Printf("listening on %s", dir.Socket())
 		errCh <- srv.Serve(listener)
 	}()
 
 	select {
 	case err := <-errCh:
-		log.Printf("server died %v", err)
+		return fmt.Errorf("serve: %w", err)
+
 	case <-ctx.Done():
-		log.Println("Graceful shutdown...")
-		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		log.Println("shutting down")
+		shutCtx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
 		defer cancel()
 
-		srv.Shutdown(shutCtx)
+		if err := srv.Shutdown(shutCtx); err != nil {
+			log.Printf("shutdown: %v", err)
+		}
+		return nil
 	}
 }

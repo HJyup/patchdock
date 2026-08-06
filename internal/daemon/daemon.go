@@ -43,7 +43,8 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) {
 	}
 	defer listener.Close()
 
-	service := NewService(dir)
+	q := queue(ctx)
+	service := NewService(q, dir)
 	router := NewRouter(service)
 	srv := &http.Server{
 		Handler:           router,

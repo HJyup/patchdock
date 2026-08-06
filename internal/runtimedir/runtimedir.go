@@ -10,6 +10,15 @@ type Dir struct {
 	root string
 }
 
+func Default() (Dir, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return Dir{}, fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	return Resolve(filepath.Join(home, ".patchdock"))
+}
+
 func Resolve(root string) (Dir, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return Dir{}, fmt.Errorf("create runtime dir %s: %w", root, err)

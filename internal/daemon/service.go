@@ -13,14 +13,20 @@ var Version = "dev"
 
 type Service struct {
 	dir     runtimedir.Dir
+	queue   chan<- any
 	started time.Time
 }
 
-func NewService(dir runtimedir.Dir) *Service {
+func NewService(queue chan<- any, dir runtimedir.Dir) *Service {
 	return &Service{
 		dir:     dir,
+		queue:   queue,
 		started: time.Now(),
 	}
+}
+
+func (s *Service) Queue(_ context.Context, action any) {
+	s.queue <- action
 }
 
 func (s *Service) Health(_ context.Context) api.HealthResponse {

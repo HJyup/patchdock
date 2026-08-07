@@ -23,7 +23,6 @@ func NewRouter(service service) http.Handler {
 	rt := &Router{service: service, mux: http.NewServeMux()}
 
 	rt.mux.HandleFunc("GET /health", rt.health)
-	rt.mux.HandleFunc("POST /queue", rt.queue)
 
 	return rt
 }
@@ -34,17 +33,6 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (rt *Router) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rt.service.Health(r.Context()))
-}
-
-func (rt *Router) queue(w http.ResponseWriter, r *http.Request) {
-	var req api.QueueRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, nil)
-		return
-	}
-
-	rt.service.Queue(r.Context(), req)
-	writeJSON(w, http.StatusOK, nil)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

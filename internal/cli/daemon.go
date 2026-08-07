@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/HJyup/patchdock/internal/daemon"
-	"github.com/HJyup/patchdock/internal/daemon/api"
 	"github.com/HJyup/patchdock/internal/daemon/client"
 	"github.com/HJyup/patchdock/internal/lock"
 	"github.com/HJyup/patchdock/internal/runtimedir"
@@ -119,32 +118,6 @@ var daemonStopCmd = &cobra.Command{
 	},
 }
 
-var daemonQueueCmd = &cobra.Command{
-	Use:   "queue <text>",
-	Short: "Push a string onto the queue",
-	Long: `Sends {"data": "<text>"} to the daemon, which logs it and nothing else.
-			A scratch command for exercising the queue and watching it land in
-			"daemon dev-view"; it goes away once runs are the thing being queued.`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		dir, err := runtimedir.Default()
-		if err != nil {
-			return err
-		}
-
-		c := client.New(dir.Socket())
-		if err := c.Queue(cmd.Context(), api.QueueRequest{Data: args[0]}); err != nil {
-			if errors.Is(err, client.ErrNoDaemon) || errors.Is(err, client.ErrNotListening) {
-				return errNoDaemon
-			}
-			return err
-		}
-
-		fmt.Fprintln(cmd.OutOrStdout(), "queued")
-		return nil
-	},
-}
-
 // awaitExit blocks until pid no longer holds the lock on path
 func awaitExit(ctx context.Context, path string, pid int) error {
 	ctx, cancel := context.WithTimeout(ctx, stopTimeout)
@@ -182,6 +155,5 @@ func init() {
 		daemonRunCmd,
 		daemonStatusCmd,
 		daemonStopCmd,
-		daemonQueueCmd,
 	)
 }

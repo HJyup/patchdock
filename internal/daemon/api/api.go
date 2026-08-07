@@ -9,7 +9,3 @@ type HealthResponse struct {
 	Uptime string `json:"uptime"`
 	PID    int    `json:"pid"`
 }
-
-type QueueRequest struct {
-	Data string `json:"data"`
-}

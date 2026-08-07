@@ -14,31 +14,29 @@ import (
 	"github.com/HJyup/patchdock/internal/runtimedir"
 )
 
+var retryTimeout = time.Second
+
 // Connect returns a client for the daemon, starting the daemon if it is not
 // already running or listening.
 func Connect(ctx context.Context, dir *runtimedir.Dir) (*client.Client, error) {
 	c := client.New(dir.Socket())
 
-	_, err := c.Health(ctx)
+	if _, err := c.Health(ctx); err != nil {
+		if !errors.Is(err, client.ErrNoDaemon) && !errors.Is(err, client.ErrNotListening) {
+			return nil, err
+		}
 
-	// Happy path
-	if err == nil {
-		return c, nil
+		if err := spawn(dir); err != nil {
+			return nil, err
+		}
+
+		return c, wait(ctx, c)
 	}
 
-	if !errors.Is(err, client.ErrNoDaemon) && !errors.Is(err, client.ErrNotListening) {
-		return nil, err
-	}
-
-	if err := spawn(dir); err != nil {
-		return nil, err
-	}
-
-	return c, wait(ctx, c)
+	return c, nil
 }
 
 func wait(ctx context.Context, c *client.Client) error {
-	after := 1 * time.Duration(time.Second)
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -54,7 +52,7 @@ func wait(ctx context.Context, c *client.Client) error {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("failed to connect to daemon: %w", ctx.Err())
-		case <-time.After(after):
+		case <-time.After(retryTimeout):
 		}
 	}
 }

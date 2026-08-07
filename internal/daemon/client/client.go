@@ -51,13 +51,6 @@ func (c *Client) Health(ctx context.Context) (api.HealthResponse, error) {
 	return out, err
 }
 
-func (c *Client) Queue(ctx context.Context, req api.QueueRequest) error {
-	path := "/queue"
-
-	err := c.do(ctx, http.MethodPost, path, req, nil)
-	return err
-}
-
 func (c *Client) newRequest(ctx context.Context, method, path string, in any) (*http.Request, error) {
 	var body io.Reader
 	if in != nil {

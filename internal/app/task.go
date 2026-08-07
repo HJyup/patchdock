@@ -22,6 +22,12 @@ import (
 const imageTagPrefix = "patchdock-agent"
 const patchdockFile = ".patchdock"
 
+// Create a client to the deamon
+// get the config
+// create a task
+// pass all nesserary information to the queue
+// deamon should return an http response which works as a SSE connection to the logs
+
 func RunTask(ctx context.Context, prompt string) error {
 	repoDir, err := os.Getwd()
 	if err != nil {

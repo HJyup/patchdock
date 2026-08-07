@@ -11,7 +11,6 @@ import (
 
 type service interface {
 	Health(ctx context.Context) api.HealthResponse
-	Queue(ctx context.Context, action any)
 }
 
 type Router struct {

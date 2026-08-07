@@ -25,10 +25,6 @@ func NewService(queue chan<- any, dir runtimedir.Dir) *Service {
 	}
 }
 
-func (s *Service) Queue(_ context.Context, action any) {
-	s.queue <- action
-}
-
 func (s *Service) Health(_ context.Context) api.HealthResponse {
 	return api.HealthResponse{
 		Status: "ok",

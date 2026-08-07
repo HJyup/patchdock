@@ -35,13 +35,26 @@ func (c *Config) Validate() error {
 	if c.Retries.Max < 1 {
 		addf("config.retries.max: must be >= 1")
 	}
-	if c.Codex != nil {
-		switch c.Codex.Auth {
-		case "":
-			addf("config.codex.auth: missing")
-		case CodexHostLogin:
+	targets := make(map[string]struct{}, len(c.Credentials))
+	for i, cred := range c.Credentials {
+		if cred.Host == "" {
+			addf("config.credentials[%d].host: missing", i)
+		}
+		switch {
+		case cred.Target == "":
+			addf("config.credentials[%d].target: missing", i)
+		case !filepath.IsAbs(cred.Target):
+			addf("config.credentials[%d].target: must be an absolute container path", i)
 		default:
-			addf("config.codex.auth: unsupported value %q", c.Codex.Auth)
+			if _, taken := targets[cred.Target]; taken {
+				addf("config.credentials[%d].target: %q is already mounted", i, cred.Target)
+			}
+			targets[cred.Target] = struct{}{}
+		}
+		for key := range cred.Env {
+			if key == "" {
+				addf("config.credentials[%d].env: empty variable name", i)
+			}
 		}
 	}
 

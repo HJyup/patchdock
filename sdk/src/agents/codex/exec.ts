@@ -39,7 +39,8 @@ async function assertAuth(): Promise<void> {
     await access(authFile);
   } catch {
     throw new Error(
-      `codex auth not found at ${authFile} — mount your ~/.codex/auth.json into the container, or set OPENAI_API_KEY`,
+      `codex auth not found at ${authFile} — declare it under credentials: in .patchdock/config.yml ` +
+        `(host: ~/.codex/auth.json, target: /codex-auth/auth.json, env: CODEX_HOME=/codex-auth), or set OPENAI_API_KEY`,
     );
   }
 }

@@ -1,10 +1,24 @@
 package cli
 
 import (
+	"errors"
 	"os"
 
 	"github.com/HJyup/patchdock/internal/app"
 	"github.com/spf13/cobra"
+)
+
+// errNotImplemented marks a command whose wiring exists but whose body is still
+// to be written.
+var errNotImplemented = errors.New("not implemented yet")
+
+// errNoDaemon is returned by the commands that deliberately do not start one.
+var errNoDaemon = errors.New("no daemon running")
+
+// Exit codes, as documented in the README.
+const (
+	exitFailure  = 1
+	exitNoDaemon = 3
 )
 
 var rootCmd = &cobra.Command{
@@ -20,8 +34,10 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
+	if err := rootCmd.Execute(); err != nil {
+		if errors.Is(err, errNoDaemon) {
+			os.Exit(exitNoDaemon)
+		}
+		os.Exit(exitFailure)
 	}
 }

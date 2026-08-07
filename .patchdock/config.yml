@@ -3,7 +3,7 @@
 # Names the agent image built for this project, so subsequent runs reuse the
 # same container instead of rebuilding. Lowercase letters and digits, separated
 # by '.', '_' or '-'.
-name_space: your_name
+name_space: patchdock
 
 # Per-container limits. Each pipeline stage runs in its own container and is
 # governed by these.
@@ -19,24 +19,19 @@ container:
   # Maximum number of containers running at once across a fan-out. Set to 0 for no limit.
   max_containers: 4
 
-# Total number of executor + reviewer rounds a run may perform before it gives
-# up. 1 means a single attempt with no retry; 2 lets the executor be re-run once
-# after the reviewer rejects. Every round is another full executor + reviewer
-# pass, so this multiplies what a run costs. Must be at least 1 — 0 runs nothing
-# and the run is reported as rejected.
+# How many times the executor may be re-run after the reviewer rejects, before
+# the run gives up. 0 means a single attempt with no retry. Every retry is
+# another full executor + reviewer round, so this multiplies what a run costs
 retries:
-  max: 2
+  max: 1
 
 # Host files mounted read-only into every stage container, so the agent can
-# authenticate
+# authenticate.
 credentials:
   - host: ~/.codex/auth.json
     target: /codex-auth/auth.json
     env:
       CODEX_HOME: /codex-auth
-
-git:
-  branch_prefix: patchdock
 
 # Which filepath drives each stage.
 stages:

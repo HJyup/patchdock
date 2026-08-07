@@ -2,27 +2,23 @@ package config
 
 import "github.com/HJyup/patchdock/internal/types"
 
-type CodexAuth string
-
-const (
-	CodexHostLogin CodexAuth = "host-login"
-)
-
 type Config struct {
-	Namespace string                     `yaml:"name_space"`
-	Container Container                  `yaml:"container"`
-	Retries   Retries                    `yaml:"retries"`
-	Codex     *CodexConfig               `yaml:"codex,omitempty"`
-	Git       Git                        `yaml:"git"`
-	Stages    map[types.StageName]string `yaml:"stages"`
+	Namespace   string                     `yaml:"name_space"`
+	Container   Container                  `yaml:"container"`
+	Retries     Retries                    `yaml:"retries"`
+	Credentials []Credential               `yaml:"credentials,omitempty"`
+	Git         Git                        `yaml:"git"`
+	Stages      map[types.StageName]string `yaml:"stages"`
 }
 
 type Git struct {
 	BranchPrefix string `yaml:"branch_prefix"`
 }
 
-type CodexConfig struct {
-	Auth CodexAuth `yaml:"auth"`
+type Credential struct {
+	Host   string            `yaml:"host"`
+	Target string            `yaml:"target"`
+	Env    map[string]string `yaml:"env,omitempty"`
 }
 
 type Container struct {

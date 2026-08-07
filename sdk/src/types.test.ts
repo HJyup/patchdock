@@ -80,6 +80,52 @@ describe("reviewerInputSchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  test("rejects legacy singular and camelCase result keys", () => {
+    const result = reviewerInputSchema.safeParse({
+      plan: fullPlan(),
+      patch: "",
+      execution_result: [fullExecutionResult()],
+      previousReviews: [fullReview()],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects null arrays from the host", () => {
+    expect(
+      reviewerInputSchema.safeParse({
+        plan: fullPlan(),
+        patch: "",
+        execution_results: null,
+        previous_reviews: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      reviewerInputSchema.safeParse({
+        plan: fullPlan(),
+        patch: "",
+        execution_results: [fullExecutionResult()],
+        previous_reviews: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  test.each(["id", "task_id", "execution_id"] as const)(
+    "rejects a previous review missing %s",
+    (field) => {
+      const review: Record<string, unknown> = { ...fullReview() };
+      delete review[field];
+
+      const result = reviewerInputSchema.safeParse({
+        plan: fullPlan(),
+        patch: "",
+        execution_results: [fullExecutionResult()],
+        previous_reviews: [review],
+      });
+
+      expect(result.success).toBe(false);
+    },
+  );
 });
 
 describe("planDataSchema (planner output)", () => {
@@ -149,6 +195,45 @@ describe("reviewDataSchema (reviewer output)", () => {
   test("rejects decisions outside the enum", () => {
     const result = reviewDataSchema.safeParse({ decision: "maybe", summary: "hmm" });
     expect(result.success).toBe(false);
+  });
+
+  test("rejects empty summaries for accept and reject decisions", () => {
+    expect(reviewDataSchema.safeParse({ decision: "accept", summary: "" }).success).toBe(
+      false,
+    );
+    expect(
+      reviewDataSchema.safeParse({
+        decision: "reject",
+        summary: "",
+        feedback: "explain the blocker",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("rejects empty feedback for a reject decision", () => {
+    const result = reviewDataSchema.safeParse({
+      decision: "reject",
+      summary: "does not compile",
+      feedback: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("does not accept host-owned identity fields", () => {
+    const result = reviewDataSchema.safeParse({
+      decision: "accept",
+      summary: "looks good",
+      feedback: "ship it",
+      id: "review-forged",
+      task_id: "task-forged",
+      execution_id: "exec-forged",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty("id");
+      expect(result.data).not.toHaveProperty("task_id");
+      expect(result.data).not.toHaveProperty("execution_id");
+    }
   });
 });
 

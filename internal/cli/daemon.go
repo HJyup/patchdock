@@ -1,7 +1,25 @@
 package cli
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"syscall"
+	"text/tabwriter"
+	"time"
+
+	"github.com/HJyup/patchdock/internal/daemon"
+	"github.com/HJyup/patchdock/internal/daemon/api"
+	"github.com/HJyup/patchdock/internal/daemon/client"
+	"github.com/HJyup/patchdock/internal/lock"
+	"github.com/HJyup/patchdock/internal/runtimedir"
 	"github.com/spf13/cobra"
+)
+
+var (
+	stopTimeout      = daemon.ShutdownTimeout + 5*time.Second
+	stopPollInterval = 100 * time.Millisecond
 )
 
 var daemonCmd = &cobra.Command{
@@ -21,9 +39,12 @@ var daemonRunCmd = &cobra.Command{
 			rather than the normal way to bring it up.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: resolve the runtime dir, point the standard logger at a live
-		// tui view, and hand off to daemon.RunServer.
-		return errNotImplemented
+		dir, err := runtimedir.Default()
+		if err != nil {
+			return err
+		}
+
+		return daemon.RunServer(cmd.Context(), dir)
 	},
 }
 
@@ -34,12 +55,26 @@ var daemonStatusCmd = &cobra.Command{
 			reachability. Exits non-zero when no daemon is running.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: client.Health, then format it.
-		//
-		// This is the one command that must NOT go through the connect-or-start
-		// ladder: starting a daemon in order to report whether one is running
-		// makes the "not running" state unobservable.
-		return errNotImplemented
+		dir, err := runtimedir.Default()
+		if err != nil {
+			return err
+		}
+
+		health, err := client.New(dir.Socket()).Health(cmd.Context())
+		if err != nil {
+			if errors.Is(err, client.ErrNoDaemon) || errors.Is(err, client.ErrNotListening) {
+				return errNoDaemon
+			}
+			return err
+		}
+
+		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
+		fmt.Fprintf(w, "status\t%s\n", health.Status)
+		fmt.Fprintf(w, "uptime\t%s\n", health.Uptime)
+		fmt.Fprintf(w, "pid\t%d\n", health.PID)
+		fmt.Fprintf(w, "socket\t%s\n", dir.Socket())
+		fmt.Fprintf(w, "logs\t%s\n", dir.Log())
+		return w.Flush()
 	},
 }
 
@@ -50,16 +85,103 @@ var daemonStopCmd = &cobra.Command{
 			containers it owns and exits.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: read the PID from the lock file, send SIGTERM, wait for the
-		// socket to disappear with a short timeout.
-		//
-		// Deliberately a signal rather than an HTTP route: it still works when
-		// the daemon is wedged inside a handler and cannot answer requests.
-		return errNotImplemented
+		dir, err := runtimedir.Default()
+		if err != nil {
+			return err
+		}
+
+		pid, err := lock.Owner(dir.Lock())
+		if err != nil {
+			if errors.Is(err, lock.ErrNotHeld) {
+				return errNoDaemon
+			}
+			return err
+		}
+
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			return fmt.Errorf("find daemon process %d: %w", pid, err)
+		}
+
+		if err := proc.Signal(syscall.SIGTERM); err != nil {
+			if errors.Is(err, os.ErrProcessDone) {
+				return errNoDaemon
+			}
+			return fmt.Errorf("signal daemon %d: %w", pid, err)
+		}
+
+		if err := awaitExit(cmd.Context(), dir.Lock(), pid); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "stopped daemon (pid %d)\n", pid)
+		return nil
 	},
+}
+
+var daemonQueueCmd = &cobra.Command{
+	Use:   "queue <text>",
+	Short: "Push a string onto the queue",
+	Long: `Sends {"data": "<text>"} to the daemon, which logs it and nothing else.
+			A scratch command for exercising the queue and watching it land in
+			"daemon dev-view"; it goes away once runs are the thing being queued.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dir, err := runtimedir.Default()
+		if err != nil {
+			return err
+		}
+
+		c := client.New(dir.Socket())
+		if err := c.Queue(cmd.Context(), api.QueueRequest{Data: args[0]}); err != nil {
+			if errors.Is(err, client.ErrNoDaemon) || errors.Is(err, client.ErrNotListening) {
+				return errNoDaemon
+			}
+			return err
+		}
+
+		fmt.Fprintln(cmd.OutOrStdout(), "queued")
+		return nil
+	},
+}
+
+// awaitExit blocks until pid no longer holds the lock on path
+func awaitExit(ctx context.Context, path string, pid int) error {
+	ctx, cancel := context.WithTimeout(ctx, stopTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(stopPollInterval)
+	defer ticker.Stop()
+
+	for {
+		owner, err := lock.Owner(path)
+		switch {
+		case errors.Is(err, lock.ErrNotHeld):
+			return nil
+		case err != nil:
+			// Held but unreadable, most likely a replacement daemon that has not written its pid yet
+			return nil
+		case owner != pid:
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf(
+				"daemon %d did not exit within %s; check %s or kill -9 %d",
+				pid, stopTimeout, path, pid,
+			)
+		case <-ticker.C:
+		}
+	}
 }
 
 func init() {
 	rootCmd.AddCommand(daemonCmd)
-	daemonCmd.AddCommand(daemonRunCmd, daemonStatusCmd, daemonStopCmd)
+	daemonCmd.AddCommand(
+		daemonRunCmd,
+		daemonStatusCmd,
+		daemonStopCmd,
+		daemonQueueCmd,
+	)
 }

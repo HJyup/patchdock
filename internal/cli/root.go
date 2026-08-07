@@ -12,6 +12,15 @@ import (
 // to be written.
 var errNotImplemented = errors.New("not implemented yet")
 
+// errNoDaemon is returned by the commands that deliberately do not start one.
+var errNoDaemon = errors.New("no daemon running")
+
+// Exit codes, as documented in the README.
+const (
+	exitFailure  = 1
+	exitNoDaemon = 3
+)
+
 var rootCmd = &cobra.Command{
 	Use:          "dock",
 	SilenceUsage: true,
@@ -25,8 +34,10 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
+	if err := rootCmd.Execute(); err != nil {
+		if errors.Is(err, errNoDaemon) {
+			os.Exit(exitNoDaemon)
+		}
+		os.Exit(exitFailure)
 	}
 }

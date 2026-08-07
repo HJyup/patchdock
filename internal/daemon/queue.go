@@ -25,5 +25,5 @@ func (q *Queue) Run(ctx context.Context) {
 }
 
 func logJob(action any) {
-	log.Printf("received a data: %v", action)
+	log.Printf("queue: received a data: %v", action)
 }

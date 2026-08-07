@@ -14,6 +14,8 @@ type Lock struct {
 	file *os.File
 }
 
+// File lock to ensure that only one OS process runs
+// Aka distributed lock
 func Acquire(path string) (*Lock, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0o600)
 	if err != nil {

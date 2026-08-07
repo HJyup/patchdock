@@ -10,6 +10,7 @@ type Dir struct {
 	root string
 }
 
+// Resolve .patchdock directory for a deamion in user's home dir
 func Default() (Dir, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -47,4 +48,8 @@ func (d Dir) Socket() string {
 
 func (d Dir) Lock() string {
 	return filepath.Join(d.root, "dock.lock")
+}
+
+func (d Dir) Log() string {
+	return filepath.Join(d.root, "dock.log")
 }

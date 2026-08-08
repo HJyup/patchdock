@@ -49,6 +49,13 @@ func (s styles) noteCell(text string, width int) string {
 	return style.Width(width).Render(text)
 }
 
+func (s styles) pressure(used, limit float64) lipgloss.Style {
+	if limit > 0 && used >= limit*limitPressure {
+		return s.amber
+	}
+	return s.muted
+}
+
 func (s styles) blank(width int) string {
 	return strings.Repeat(" ", width)
 }

@@ -16,8 +16,11 @@ import (
 )
 
 const (
-	// detailIndent lines the activity line up under the step's label
-	detailIndent = "  "
+	// gutter is the left margin every line of a run is printed against
+	gutter = "  "
+	// subIndent nests the lines belonging to a block's own title
+	subIndent    = gutter + "  "
+	childIndent  = gutter + "    "
 	fallbackCols = 80
 )
 
@@ -25,9 +28,29 @@ const (
 	sucessSign = "✔"
 	rejectSign = "✖"
 	retrySign  = "↻"
-	lineSign   = "▸"
 	arrowSign  = "→"
 )
+
+// RunInfo names the run before any stage opens. It is re-rendered on resize
+// rather than flattened once, so the task line truncates to the real width
+type RunInfo struct {
+	Repo   string
+	RunID  string
+	Task   string
+	LogDir string
+}
+
+// Result is the closing account of a run
+type Result struct {
+	Accepted  bool
+	Attempts  int
+	Duration  time.Duration
+	Branch    string
+	Files     int
+	Additions int
+	Deletions int
+	LogDir    string
+}
 
 // Progress is the whole surface the rest of patchdock sees. Every method is
 // safe to call from any goroutine: on the live path they become messages to the
@@ -36,6 +59,7 @@ type Progress struct {
 	out     io.Writer
 	styles  styles
 	live    bool
+	timeout time.Duration
 	program *tea.Program
 
 	mu      sync.Mutex
@@ -50,8 +74,8 @@ type Progress struct {
 
 // New picks the renderer that suits out. A tea.Program writing to a pipe
 // produces repaint sequences rather than text, so the plain path is not a
-// fallback so much as the correct renderer for a non-terminal
-func New(out io.Writer) *Progress {
+// fallback so much as the correct renderer for a non-terminal.
+func New(out io.Writer, timeout time.Duration) *Progress {
 	styles := newStyles(out)
 	live := usable(out)
 
@@ -59,6 +83,7 @@ func New(out io.Writer) *Progress {
 		out:      out,
 		styles:   styles,
 		live:     live,
+		timeout:  timeout,
 		finished: make(chan struct{}),
 	}
 
@@ -70,7 +95,7 @@ func New(out io.Writer) *Progress {
 	// Input stays closed and signals stay ours: this program renders, it does
 	// not interact, and Ctrl-C must reach the process rather than be swallowed
 	p.program = tea.NewProgram(
-		newModel(styles),
+		newModel(styles, timeout),
 		tea.WithOutput(out),
 		tea.WithInput(nil),
 		tea.WithoutSignalHandler(),
@@ -86,22 +111,21 @@ func New(out io.Writer) *Progress {
 }
 
 // Header names the run before any step opens, so a long pipeline is
-// identifiable while it is still going
-func (p *Progress) Header(title, detail string) {
-	line := fmt.Sprintf("%v %v", lineSign, p.styles.title.Render(title))
-	if detail != "" {
-		line += "  " + detail
-	}
-
+// identifiable while it is still going — which repo it belongs to, and where
+// its logs are, up front rather than only once it has finished
+func (p *Progress) Header(info RunInfo) {
 	p.mu.Lock()
 	live := p.running
 	p.mu.Unlock()
 
 	if live {
-		p.program.Send(headerMsg{text: line})
+		p.program.Send(headerMsg{info: info})
 		return
 	}
-	fmt.Fprintf(p.out, "%s\n", line)
+
+	for _, line := range headerLines(info, p.styles, fallbackCols) {
+		fmt.Fprintf(p.out, "%s\n", line)
+	}
 }
 
 // Start opens a step. Any activity the previous step reported is dropped
@@ -115,7 +139,26 @@ func (p *Progress) Start(label string) {
 		p.program.Send(startMsg{label: label})
 		return
 	}
-	fmt.Fprintf(p.out, "%v %s\n", arrowSign, strings.TrimRight(label, " "))
+	fmt.Fprintf(p.out, "%s%v %s\n", gutter, arrowSign, strings.TrimRight(label, " "))
+}
+
+// Note commits a recessive line under the step that just closed — the planner's
+// strategy, a reviewer's verdict — so the reason for what happens next survives
+// in scrollback rather than flashing past on the activity line
+func (p *Progress) Note(text string) {
+	if text == "" {
+		return
+	}
+
+	p.mu.Lock()
+	live := p.running
+	p.mu.Unlock()
+
+	if live {
+		p.program.Send(noteMsg{text: text})
+		return
+	}
+	fmt.Fprintf(p.out, "%s%s\n", childIndent, p.styles.muted.Render(text))
 }
 
 // Detail replaces the activity line under the active step. It is dropped off a
@@ -154,9 +197,11 @@ func (p *Progress) FinishRetry(note string) {
 
 // Summary prints the closing lines of a run. It runs after Close, once the
 // program has released the terminal, so it writes straight to the output
-func (p *Progress) Summary(headline, detail string) {
-	fmt.Fprintf(p.out, "\n%s\n%s\n",
-		p.styles.title.Render(headline), p.styles.muted.Render(detail))
+func (p *Progress) Summary(res Result) {
+	fmt.Fprintf(p.out, "\n")
+	for _, line := range summaryLines(res, p.styles) {
+		fmt.Fprintf(p.out, "%s\n", line)
+	}
 }
 
 // Muted renders text in the same recessive grey as elapsed times, so a caller
@@ -198,8 +243,9 @@ func (p *Progress) commit(note, mark string) {
 		return
 	}
 
-	fmt.Fprintf(p.out, "%s %s %s  %s\n",
-		mark, label, p.styles.noteCell(note, noteWidth), p.styles.muted.Render(short(elapsed)))
+	fmt.Fprintf(p.out, "%s%s %s %s  %s\n",
+		gutter, mark, label, p.styles.noteCell(note, noteWidth),
+		p.styles.muted.Render(short(elapsed)))
 }
 
 func short(d time.Duration) string {

@@ -24,6 +24,7 @@ type Outcome struct {
 	Attempts int
 	Accepted bool
 	Branch   string
+	Patch    auditlog.PatchStat
 }
 
 func New(cfg config.Config, repoDir string, runner *stage.Runner, logger *auditlog.Logger, reporter Reporter) *Pipeline {
@@ -68,6 +69,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
 
+	p.reporter.StageNote(plan.Summary)
 	audit.Planned(plan)
 
 	wks, err := workspace.NewWorkspace(p.repoDir, dir.WorkspacePath())
@@ -103,9 +105,8 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			return out, fmt.Errorf("executor stage (failed computing diffs): %w", err)
 		}
 
-		if err := audit.Patched(diff); err != nil {
-			return out, fmt.Errorf("write workspace patch: %w", err)
-		}
+		out.Patch = auditlog.StatPatch(diff)
+		audit.Patched(out.Patch)
 
 		p.reporter.StageStarted(types.StageReviewer, attempt)
 

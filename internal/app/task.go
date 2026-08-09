@@ -111,7 +111,7 @@ func RunTask(ctx context.Context, prompt string) error {
 	p := pipeline.New(cfg, repoDir, runner, logger, reporter)
 	outcome, err := p.Run(ctx, task)
 
-	progress.Finish("", err)
+	progress.Finish(err)
 	progress.Close()
 
 	if err != nil {
@@ -161,7 +161,7 @@ func buildImage(ctx context.Context, cli *docker.Client, imageTag, patchdockDir 
 	}
 
 	res := <-result
-	progress.Finish("", res.Err)
+	progress.Finish(res.Err)
 
 	if res.Err != nil {
 		fmt.Fprint(os.Stderr, buildLog.String())

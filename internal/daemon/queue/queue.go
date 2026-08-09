@@ -205,6 +205,9 @@ func (q *Queue) stage(m stageMsg) {
 		r.state.Attempt = m.attempt
 	}
 
+	now := time.Now()
+	r.state.StageStartedAt = &now
+
 	r.state.Activity = ""
 	q.dirty = true
 }

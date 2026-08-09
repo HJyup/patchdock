@@ -1,6 +1,8 @@
 package queue
 
 import (
+	"strings"
+
 	"github.com/HJyup/patchdock/internal/types"
 )
 
@@ -35,7 +37,11 @@ func (r *reporter) StageActivity(activity string) {
 	}
 }
 
+// StageNote arrives as prose and may span lines. Summary is a one-line field,
+// the way Activity already is by the time events.go is done with it, so it is
+// flattened here rather than left for every client to normalise
 func (r *reporter) StageNote(note string) {
+	note = strings.TrimSpace(strings.ReplaceAll(note, "\n", " "))
 	if note == "" {
 		return
 	}

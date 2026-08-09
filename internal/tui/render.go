@@ -113,6 +113,13 @@ func coarse(d time.Duration) string {
 	}
 }
 
+// oneLine flattens prose onto a single row. A plan or a review verdict is
+// written as sentences and may wrap, and a row that silently becomes three
+// pushes everything below it around as the run progresses
+func oneLine(text string) string {
+	return strings.TrimSpace(strings.ReplaceAll(text, "\n", " "))
+}
+
 func pad(text string, width int) string {
 	if gap := width - ansi.StringWidth(text); gap > 0 {
 		return text + strings.Repeat(" ", gap)

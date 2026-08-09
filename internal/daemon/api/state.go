@@ -50,26 +50,22 @@ func StatusForStage(stage types.StageName) Status {
 
 // Run is the daemon's record of one queued or running task
 type Run struct {
-	ID     string `json:"id"`
-	TaskID string `json:"task_id"`
-
-	// Repo is the absolute path the run targets. Runs are grouped by it
-	Repo string `json:"repo"`
-
-	// Title is the first line of the task, for display only
+	ID       string `json:"id"`
+	TaskID   string `json:"task_id"`
+	Repo     string `json:"repo"`
 	Title    string `json:"title"`
 	Status   Status `json:"status"`
 	Activity string `json:"activity,omitempty"`
 	Summary  string `json:"summary,omitempty"`
 	Attempt  int    `json:"attempt,omitempty"`
 
-	QueuedAt   time.Time  `json:"queued_at"`
-	StartedAt  *time.Time `json:"started_at,omitempty"`
-	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	QueuedAt  time.Time  `json:"queued_at"`
+	StartedAt *time.Time `json:"started_at,omitempty"`
 
-	// Patch is the diff size of the most recent attempt
-	Patch  *auditlog.PatchStat `json:"patch,omitempty"`
-	Branch string              `json:"branch,omitempty"`
+	StageStartedAt *time.Time          `json:"stage_started_at,omitempty"`
+	FinishedAt     *time.Time          `json:"finished_at,omitempty"`
+	Patch          *auditlog.PatchStat `json:"patch,omitempty"`
+	Branch         string              `json:"branch,omitempty"`
 }
 
 func (r Run) Clone() Run {
@@ -78,6 +74,10 @@ func (r Run) Clone() Run {
 	if r.StartedAt != nil {
 		t := *r.StartedAt
 		out.StartedAt = &t
+	}
+	if r.StageStartedAt != nil {
+		t := *r.StageStartedAt
+		out.StageStartedAt = &t
 	}
 	if r.FinishedAt != nil {
 		t := *r.FinishedAt
@@ -91,7 +91,6 @@ func (r Run) Clone() Run {
 	return out
 }
 
-// Snapshot is the whole daemon state at one instant
 type Snapshot struct {
 	At   time.Time `json:"at"`
 	Runs []Run     `json:"runs"`

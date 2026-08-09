@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/HJyup/patchdock/internal/auditlog"
 	"github.com/HJyup/patchdock/internal/config"
+	"github.com/HJyup/patchdock/internal/credentials"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/pipeline"
 	"github.com/HJyup/patchdock/internal/stage"
@@ -19,8 +21,15 @@ import (
 	"github.com/HJyup/patchdock/internal/utils"
 )
 
-const imageTagPrefix = "patchdock-agent"
 const patchdockFile = ".patchdock"
+
+var errRejected = errors.New("reviewer rejected every attempt")
+
+// Create a client to the deamon
+// get the config
+// create a task
+// pass all nesserary information to the queue
+// deamon should return an http response which works as a SSE connection to the logs
 
 func RunTask(ctx context.Context, prompt string) error {
 	repoDir, err := os.Getwd()
@@ -53,22 +62,14 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("invalid task: %w", err)
 	}
 
-	imageTag := fmt.Sprintf("%s-%s", imageTagPrefix, cfg.Namespace)
+	imageTag := cfg.ImageTag()
 	found, err := cli.ImageExists(ctx, imageTag)
 	if err != nil {
 		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", imageTag, err)
 	}
 
-	progress := tui.New(os.Stdout)
-	defer progress.Close()
-	progress.Header(task.ID, task.Description)
-
-	if !found {
-		if err := buildImage(ctx, cli, imageTag, patchdockDir, progress); err != nil {
-			return err
-		}
-	}
-
+	// The logger comes up before the first frame so the header can point at the
+	// log directory: a run that dies early is exactly the one whose logs you want
 	runID := fmt.Sprintf("%s-%s", task.ID, time.Now().Format("20060102-150405"))
 	logger, err := auditlog.New(runID, patchdockDir)
 	if err != nil {
@@ -76,7 +77,25 @@ func RunTask(ctx context.Context, prompt string) error {
 	}
 	defer logger.Close()
 
-	credMounts, credEnv, err := resolveCredentials(cfg.Credentials)
+	logDir := displayPath(repoDir, logger.LogDir)
+	started := time.Now()
+
+	progress := tui.New(os.Stdout, cfg.Container.Timeout.Duration())
+	defer progress.Close()
+	progress.Header(tui.RunInfo{
+		Repo:   filepath.Base(repoDir),
+		RunID:  task.ID,
+		Task:   utils.FirstLine(task.Description),
+		LogDir: logDir,
+	})
+
+	if !found {
+		if err := buildImage(ctx, cli, imageTag, patchdockDir, progress); err != nil {
+			return err
+		}
+	}
+
+	credMounts, credEnv, err := credentials.Resolve(cfg.Credentials)
 	if err != nil {
 		return fmt.Errorf("load credentials: %w", err)
 	}
@@ -96,18 +115,33 @@ func RunTask(ctx context.Context, prompt string) error {
 	progress.Close()
 
 	if err != nil {
-		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, logger.LogDir)
+		return fmt.Errorf("task %s has failed → %w. Check %s", task.ID, err, logDir)
 	}
+
+	progress.Summary(tui.Result{
+		Accepted:  outcome.Accepted,
+		Attempts:  outcome.Attempts,
+		Duration:  time.Since(started),
+		Branch:    outcome.Branch,
+		Files:     outcome.Patch.Files,
+		Additions: outcome.Patch.Additions,
+		Deletions: outcome.Patch.Deletions,
+		LogDir:    logDir,
+	})
 
 	if !outcome.Accepted {
-		return fmt.Errorf("task %s has failed → reviewer rejected all %d attempt(s). Check %s", task.ID, outcome.Attempts, logger.LogDir)
+		return errRejected
 	}
 
-	progress.Summary(
-		fmt.Sprintf("Pipeline finished successfully · %s · %s", utils.Plural(outcome.Attempts, "attempt"), outcome.Branch),
-		logger.LogDir)
-
 	return nil
+}
+
+func displayPath(base, path string) string {
+	rel, err := filepath.Rel(base, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return rel
 }
 
 func buildImage(ctx context.Context, cli *docker.Client, imageTag, patchdockDir string, progress *tui.Progress) error {

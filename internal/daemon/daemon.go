@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/HJyup/patchdock/internal/daemon/broker"
+	"github.com/HJyup/patchdock/internal/daemon/queue"
 	"github.com/HJyup/patchdock/internal/lock"
 	"github.com/HJyup/patchdock/internal/runtimedir"
 	"github.com/HJyup/patchdock/internal/transport"
@@ -47,10 +49,13 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) error {
 	}
 	defer listener.Close()
 
-	bus := make(chan any)
-	NewQueue(bus).Run(ctx)
+	q := queue.New(queue.Config{Runner: runPipeline, Retention: 15 * time.Minute})
+	b := broker.New(q.Snaps())
 
-	service := NewService(bus, dir)
+	go q.Run(ctx)
+	go b.Run(ctx)
+
+	service := NewService(q, dir)
 	router := NewRouter(service)
 	srv := &http.Server{
 		Handler:           router,

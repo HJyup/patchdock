@@ -37,9 +37,8 @@ func (a *auditRun) Planned(plan types.Plan) {
 	a.rec.Plan = plan
 }
 
-func (a *auditRun) Patched(diff string) error {
-	a.rec.Patch = auditlog.StatPatch(diff)
-	return nil
+func (a *auditRun) Patched(stat auditlog.PatchStat) {
+	a.rec.Patch = stat
 }
 
 func (a *auditRun) Failed(name types.StageName, err error) {

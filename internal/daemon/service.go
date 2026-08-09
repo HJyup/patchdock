@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/HJyup/patchdock/internal/daemon/api"
+	"github.com/HJyup/patchdock/internal/daemon/queue"
 	"github.com/HJyup/patchdock/internal/runtimedir"
 )
 
@@ -13,14 +14,14 @@ var Version = "dev"
 
 type Service struct {
 	dir     runtimedir.Dir
-	queue   chan<- any
+	queue   *queue.Queue
 	started time.Time
 }
 
-func NewService(queue chan<- any, dir runtimedir.Dir) *Service {
+func NewService(q *queue.Queue, dir runtimedir.Dir) *Service {
 	return &Service{
 		dir:     dir,
-		queue:   queue,
+		queue:   q,
 		started: time.Now(),
 	}
 }

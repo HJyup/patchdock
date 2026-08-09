@@ -9,3 +9,12 @@ type HealthResponse struct {
 	Uptime string `json:"uptime"`
 	PID    int    `json:"pid"`
 }
+
+type SubmitRequest struct {
+	Repo   string `json:"repo"`
+	Prompt string `json:"prompt"`
+}
+
+type SubmitResponse struct {
+	RunID string `json:"run_id"`
+}

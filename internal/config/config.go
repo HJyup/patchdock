@@ -30,3 +30,12 @@ type Container struct {
 type Retries struct {
 	Max int `yaml:"max"`
 }
+
+// imageTagPrefix names every agent image patchdock builds
+const imageTagPrefix = "patchdock-agent"
+
+// ImageTag is the agent image this config builds and runs. It is derived from
+// the namespace so two repos never collide on one image
+func (c Config) ImageTag() string {
+	return imageTagPrefix + "-" + c.Namespace
+}

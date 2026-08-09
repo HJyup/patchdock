@@ -11,9 +11,10 @@ import (
 )
 
 type (
-	headerMsg struct{ text string }
+	headerMsg struct{ info RunInfo }
 	startMsg  struct{ label string }
 	detailMsg struct{ activity string }
+	noteMsg   struct{ text string }
 	finishMsg struct{ note, mark string }
 )
 
@@ -28,7 +29,8 @@ const minDetail = 20
 type model struct {
 	styles  styles
 	spin    spinner.Model
-	header  string
+	timeout time.Duration
+	info    RunInfo
 	done    []string
 	label   string
 	detail  string
@@ -37,14 +39,14 @@ type model struct {
 	width   int
 }
 
-func newModel(s styles) model {
+func newModel(s styles, timeout time.Duration) model {
 	spin := spinner.New()
 	// MiniDot rather than Dot: Dot's frames carry a trailing space, which would
 	// double up against the separator below
 	spin.Spinner = spinner.MiniDot
 	spin.Style = s.accent
 
-	return model{styles: s, spin: spin, width: fallbackCols}
+	return model{styles: s, spin: spin, timeout: timeout, width: fallbackCols}
 }
 
 func (m model) Init() tea.Cmd {
@@ -62,7 +64,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case headerMsg:
-		m.header = msg.text
+		m.info = msg.info
 		return m, nil
 
 	case startMsg:
@@ -71,6 +73,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case detailMsg:
 		m.detail = msg.activity
+		return m, nil
+
+	case noteMsg:
+		m.done = append(m.done, childIndent+m.styles.muted.Render(msg.text))
 		return m, nil
 
 	case finishMsg:
@@ -93,8 +99,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	var b strings.Builder
 
-	if m.header != "" {
-		fmt.Fprintf(&b, "%s\n\n", m.header)
+	if header := headerLines(m.info, m.styles, m.width); len(header) > 0 {
+		fmt.Fprintf(&b, "%s\n\n", strings.Join(header, "\n"))
 	}
 	for _, line := range m.done {
 		fmt.Fprintf(&b, "%s\n", line)
@@ -104,24 +110,28 @@ func (m model) View() string {
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, "%s %s %s  %s",
+	elapsed := time.Since(m.started)
+	fmt.Fprintf(&b, "%s%s %s %s  %s  %s",
+		gutter,
 		m.spin.View(),
 		m.label,
 		m.styles.blank(noteWidth),
-		m.styles.muted.Render(short(time.Since(m.started))))
+		m.styles.muted.Render(pad(short(elapsed), timeWidth)),
+		remaining(m.styles, m.timeout, elapsed))
 
 	if m.detail != "" {
 		// Truncation is display-width aware, so a wide rune cannot overflow the
 		// row and force the renderer to reason about a wrap it did not plan
-		activity := ansi.Truncate(m.detail, max(m.width-len(detailIndent)-1, minDetail), "…")
-		fmt.Fprintf(&b, "\n%s%s", detailIndent, m.styles.muted.Render(activity))
+		activity := ansi.Truncate(m.detail, max(m.width-len(childIndent)-1, minDetail), "…")
+		fmt.Fprintf(&b, "\n%s%s", childIndent, m.styles.muted.Render(activity))
 	}
 
 	return b.String()
 }
 
 func (m model) commit(mark, note string) string {
-	return fmt.Sprintf("%s %s %s  %s",
+	return fmt.Sprintf("%s%s %s %s  %s",
+		gutter,
 		mark,
 		m.label,
 		m.styles.noteCell(note, noteWidth),

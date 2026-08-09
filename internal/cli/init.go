@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
-	"github.com/HJyup/patchdock/internal/app"
+	"github.com/HJyup/patchdock/internal/scaffold"
 	"github.com/spf13/cobra"
 )
 
@@ -18,12 +20,19 @@ var initCmd = &cobra.Command{
 			Refuses to touch an existing .patchdock/ unless --force is given.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path, err := app.RunPatchdockInit(force)
+		repoDir, err := os.Getwd()
 		if err != nil {
+			return fmt.Errorf("resolve repo dir %s: %w", repoDir, err)
+		}
+
+		if err := scaffold.Init(scaffold.Options{RepoDir: repoDir, Force: force}); err != nil {
+			if errors.Is(err, scaffold.ErrAlreadyExists) {
+				return fmt.Errorf("%s already has .patchdock. Rerun with --force to regenerate it (overwrites config.yml and your agent files)", repoDir)
+			}
 			return err
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "created %s\n", filepath.Join(path, ".patchdock"))
+		fmt.Fprintf(cmd.OutOrStdout(), "created %s\n", filepath.Join(repoDir, ".patchdock"))
 		return nil
 	},
 }

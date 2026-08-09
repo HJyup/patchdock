@@ -42,9 +42,9 @@ func headerLines(info RunInfo, s styles, width int) []string {
 // summaryLines renders the closing account of a run: the verdict, what it cost,
 // what it produced, and the one command that picks the work up
 func summaryLines(res Result, s styles) []string {
-	headline, tone := fmt.Sprintf("Accepted on attempt %d", res.Attempts), s.green
+	headline, tone := "Accepted", s.green
 	if !res.Accepted {
-		headline, tone = fmt.Sprintf("Rejected after %s", plural(res.Attempts, "attempt")), s.red
+		headline, tone = "Rejected", s.red
 	}
 
 	lines := []string{fmt.Sprintf("%s%s  %s",

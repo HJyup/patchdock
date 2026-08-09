@@ -43,7 +43,6 @@ type RunInfo struct {
 // Result is the closing account of a run
 type Result struct {
 	Accepted  bool
-	Attempts  int
 	Duration  time.Duration
 	Branch    string
 	Files     int
@@ -128,8 +127,12 @@ func (p *Progress) Header(info RunInfo) {
 	}
 }
 
-// Start opens a step. Any activity the previous step reported is dropped
+// Start opens a step, closing the previous one first: a stage ending is not
+// reported separately, so the next stage beginning is the signal. Any activity
+// the previous step reported is dropped
 func (p *Progress) Start(label string) {
+	p.commit("", p.styles.green.Render(sucessSign))
+
 	p.mu.Lock()
 	p.label, p.started, p.active = label, time.Now(), true
 	live := p.running

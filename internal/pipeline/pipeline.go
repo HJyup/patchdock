@@ -21,17 +21,12 @@ type Pipeline struct {
 }
 
 type Outcome struct {
-	Attempts int
 	Accepted bool
 	Branch   string
 	Patch    auditlog.PatchStat
 }
 
 func New(cfg config.Config, repoDir string, runner *stage.Runner, logger *auditlog.Logger, reporter Reporter) *Pipeline {
-	if reporter == nil {
-		reporter = stubReporter{}
-	}
-
 	return &Pipeline{
 		cfg:      cfg,
 		repoDir:  repoDir,
@@ -54,8 +49,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	audit := newAuditRun(p.logger, task)
 	defer func() { audit.Finish(history, out, err) }()
 
-	p.reporter.StageStarted(types.StagePlanner, 0)
-
+	p.reporter.StageChange(types.StagePlanner, 0)
 	plan, err := p.runner.RunPlanner(ctx, stage.PlannerRequest{
 		Agent:       p.agentSpec(p.cfg.Stages[types.StagePlanner]),
 		Input:       stage.PlannerInput{Task: task},
@@ -63,7 +57,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		RepoDir:     p.repoDir,
 	})
 
-	p.reporter.StageFinished(types.StagePlanner, 0, "", err)
 	if err != nil {
 		audit.Failed(types.StagePlanner, err)
 		return out, fmt.Errorf("planner stage: %w", err)
@@ -78,8 +71,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	}
 
 	for attempt := 1; attempt <= p.cfg.Retries.Max; attempt++ {
-		p.reporter.StageStarted(types.StageExecutor, attempt)
-
+		p.reporter.StageChange(types.StageExecutor, attempt)
 		res, err := p.runner.RunExecutor(ctx, stage.ExecutorRequest{
 			Agent: p.agentSpec(p.cfg.Stages[types.StageExecutor]),
 			Input: stage.ExecutorInput{
@@ -91,7 +83,6 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			Attempt:      stage.Attempt{Number: attempt, Maximum: p.cfg.Retries.Max},
 		})
 
-		p.reporter.StageFinished(types.StageExecutor, attempt, string(res.Status), err)
 		if err != nil {
 			audit.Failed(types.StageExecutor, err)
 			return out, fmt.Errorf("executor stage: %w", err)
@@ -108,7 +99,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		out.Patch = auditlog.StatPatch(diff)
 		audit.Patched(out.Patch)
 
-		p.reporter.StageStarted(types.StageReviewer, attempt)
+		p.reporter.StageChange(types.StageReviewer, attempt)
 
 		rev, err := p.runner.RunReviewer(ctx, stage.ReviewerRequest{
 			Agent: p.agentSpec(p.cfg.Stages[types.StageReviewer]),
@@ -123,14 +114,13 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			Attempt:      stage.Attempt{Number: attempt, Maximum: p.cfg.Retries.Max},
 		})
 
-		p.reporter.StageFinished(types.StageReviewer, attempt, string(rev.Decision), err)
 		if err != nil {
 			audit.Failed(types.StageReviewer, err)
 			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
 
+		p.reporter.StageNote(rev.Summary)
 		history.AddReview(rev)
-		out.Attempts = attempt
 
 		if rev.Decision == types.ReviewAccept {
 			out.Accepted = true

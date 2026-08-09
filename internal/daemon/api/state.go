@@ -60,12 +60,8 @@ type Run struct {
 	Title    string `json:"title"`
 	Status   Status `json:"status"`
 	Activity string `json:"activity,omitempty"`
-
-	// Reason explains a non-obvious status
-	Reason string `json:"reason,omitempty"`
-
-	Attempt  int `json:"attempt,omitempty"`
-	MaxTries int `json:"max_tries"`
+	Summary  string `json:"summary,omitempty"`
+	Attempt  int    `json:"attempt,omitempty"`
 
 	QueuedAt   time.Time  `json:"queued_at"`
 	StartedAt  *time.Time `json:"started_at,omitempty"`

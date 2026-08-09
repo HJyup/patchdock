@@ -47,13 +47,12 @@ func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (q
 	defer logger.Close()
 
 	imageTag := cfg.ImageTag()
-
 	found, err := cli.ImageExists(ctx, imageTag)
 	if err != nil {
 		return queue.Outcome{}, fmt.Errorf("check image %q: %w. Is the Docker daemon running", imageTag, err)
 	}
 	if !found {
-		if err := buildAgentImage(ctx, cli, imageTag, dir, logger); err != nil {
+		if err := buildImage(ctx, cli, imageTag, dir, logger); err != nil {
 			return queue.Outcome{}, err
 		}
 	}
@@ -81,13 +80,13 @@ func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (q
 	}
 
 	return queue.Outcome{
-		Attempts: out.Attempts,
 		Accepted: out.Accepted,
 		Branch:   out.Branch,
+		Patch:    out.Patch,
 	}, nil
 }
 
-func buildAgentImage(ctx context.Context, cli *docker.Client, imageTag, dir string, logw io.Writer) error {
+func buildImage(ctx context.Context, cli *docker.Client, imageTag, dir string, logw io.Writer) error {
 	if _, err := os.Stat(filepath.Join(dir, "Dockerfile")); err != nil {
 		return fmt.Errorf("image %q not found and %s has no Dockerfile, run `dock init` to scaffold one", imageTag, dir)
 	}

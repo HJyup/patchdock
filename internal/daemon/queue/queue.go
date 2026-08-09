@@ -131,6 +131,8 @@ func (q *Queue) handle(msg message) {
 		q.stage(m)
 	case activityMsg:
 		q.activity(m)
+	case summaryMsg:
+		q.summary(m)
 	case doneMsg:
 		q.done(m)
 	}
@@ -221,6 +223,16 @@ func (q *Queue) activity(m activityMsg) {
 	q.dirty = true
 }
 
+func (q *Queue) summary(m summaryMsg) {
+	r, ok := q.runs[m.runID]
+	if !ok || r.state.Summary == m.text {
+		return
+	}
+
+	r.state.Summary = m.text
+	q.dirty = true
+}
+
 func (q *Queue) done(m doneMsg) {
 	r, ok := q.runs[m.runID]
 	if !ok {
@@ -229,7 +241,6 @@ func (q *Queue) done(m doneMsg) {
 
 	now := time.Now()
 	r.state.FinishedAt = &now
-	r.state.Attempt = 0
 	r.state.Activity = ""
 
 	switch {
@@ -237,12 +248,16 @@ func (q *Queue) done(m doneMsg) {
 		r.state.Status = api.StatusCancelled
 	case m.err != nil:
 		r.state.Status = api.StatusFailed
-		r.state.Reason = m.err.Error()
-	case m.out.Accepted:
-		r.state.Status = api.StatusSucceeded
-		r.state.Branch = m.out.Branch
+		r.state.Summary = m.err.Error()
 	default:
-		r.state.Status = api.StatusRejected
+		patch := m.out.Patch
+		r.state.Patch = &patch
+		if m.out.Accepted {
+			r.state.Status = api.StatusSucceeded
+			r.state.Branch = m.out.Branch
+		} else {
+			r.state.Status = api.StatusRejected
+		}
 	}
 
 	delete(q.cancels, m.runID)

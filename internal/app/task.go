@@ -12,6 +12,7 @@ import (
 
 	"github.com/HJyup/patchdock/internal/auditlog"
 	"github.com/HJyup/patchdock/internal/config"
+	"github.com/HJyup/patchdock/internal/credentials"
 	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/pipeline"
 	"github.com/HJyup/patchdock/internal/stage"
@@ -20,7 +21,6 @@ import (
 	"github.com/HJyup/patchdock/internal/utils"
 )
 
-const imageTagPrefix = "patchdock-agent"
 const patchdockFile = ".patchdock"
 
 var errRejected = errors.New("reviewer rejected every attempt")
@@ -62,7 +62,7 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("invalid task: %w", err)
 	}
 
-	imageTag := fmt.Sprintf("%s-%s", imageTagPrefix, cfg.Namespace)
+	imageTag := cfg.ImageTag()
 	found, err := cli.ImageExists(ctx, imageTag)
 	if err != nil {
 		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", imageTag, err)
@@ -95,7 +95,7 @@ func RunTask(ctx context.Context, prompt string) error {
 		}
 	}
 
-	credMounts, credEnv, err := resolveCredentials(cfg.Credentials)
+	credMounts, credEnv, err := credentials.Resolve(cfg.Credentials)
 	if err != nil {
 		return fmt.Errorf("load credentials: %w", err)
 	}

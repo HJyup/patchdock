@@ -1,7 +1,6 @@
 package api
 
 import (
-	"slices"
 	"time"
 
 	"github.com/HJyup/patchdock/internal/auditlog"
@@ -49,19 +48,6 @@ func StatusForStage(stage types.StageName) Status {
 	}
 }
 
-type Attempt struct {
-	Number int `json:"number"`
-
-	// Execution is a types.ExecutionStatus, empty while the executor is running
-	Execution string `json:"execution,omitempty"`
-
-	// Review is a types.ReviewDecision, empty while the reviewer is running
-	Review string `json:"review,omitempty"`
-
-	// Summary is the reviewer's verdict, shown on the rejected attempts
-	Summary string `json:"summary,omitempty"`
-}
-
 // Run is the daemon's record of one queued or running task
 type Run struct {
 	ID     string `json:"id"`
@@ -85,8 +71,6 @@ type Run struct {
 	StartedAt  *time.Time `json:"started_at,omitempty"`
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
 
-	Attempts []Attempt `json:"attempts,omitempty"`
-
 	// Patch is the diff size of the most recent attempt
 	Patch  *auditlog.PatchStat `json:"patch,omitempty"`
 	Branch string              `json:"branch,omitempty"`
@@ -107,7 +91,6 @@ func (r Run) Clone() Run {
 		p := *r.Patch
 		out.Patch = &p
 	}
-	out.Attempts = slices.Clone(r.Attempts)
 
 	return out
 }

@@ -5,12 +5,10 @@ import (
 	"errors"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/HJyup/patchdock/internal/daemon/api"
 )
 
-var reconcileInterval = 200 * time.Millisecond
 var ErrClosed = errors.New("the broker has been closed")
 
 // Defines main state where we fannin out snapshot of runs to the subscribers
@@ -33,12 +31,7 @@ func New(snaps <-chan api.Snapshot) *Broker {
 }
 
 func (b *Broker) Run(ctx context.Context) {
-	ticker := time.NewTicker(reconcileInterval)
-	defer ticker.Stop()
 	defer b.Close()
-
-	// Holds the last updated snap, so we don't update for every update (make it standartisied at every `reconcileInterval`)
-	var pending *api.Snapshot
 
 	for {
 		select {
@@ -51,13 +44,7 @@ func (b *Broker) Run(ctx context.Context) {
 				log.Println("broker: snapshot channel closed")
 				return
 			}
-			pending = &snap
-
-		case <-ticker.C:
-			if pending != nil {
-				b.fanout(*pending)
-				pending = nil
-			}
+			b.fanout(snap)
 		}
 	}
 }

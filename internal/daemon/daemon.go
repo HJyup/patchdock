@@ -50,7 +50,7 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) error {
 	defer listener.Close()
 
 	q := queue.New(queue.Config{Runner: runPipeline, Retention: 15 * time.Minute})
-	b := broker.New(q.Snaps())
+	b := broker.New(q.Snaps)
 
 	go q.Run(ctx)
 	go b.Run(ctx)

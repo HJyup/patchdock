@@ -11,25 +11,30 @@ type Reporter interface {
 	StageFinished(stage types.StageName, attempt int, note string, err error)
 }
 
-// reporter is a running pipeline's only link to the queue. It posts messages
-// and never touches run state: the queue goroutine decides what each one means
 type reporter struct {
 	queue *Queue
 	runID string
 }
 
 func (r *reporter) StageStarted(stage types.StageName, attempt int) {
-	r.queue.post(stageStartedMsg{
+	msg := stageMsg{
 		runID:   r.runID,
 		stage:   stage,
 		attempt: attempt,
-	})
+	}
+
+	select {
+	case r.queue.inbox <- msg:
+	case <-r.queue.ctx.Done():
+	}
 }
 
-// The rest report detail the snapshot has nowhere to put. A run's state is
-// whichever stage is running now, which StageStarted already covers, and the
-// failure that ends a run arrives with the outcome instead. Dropping them here
-// is what keeps a snapshot to current state rather than a history
+func (r *reporter) StageActivity(activity string) {
+	select {
+	case r.queue.inbox <- activityMsg{runID: r.runID, text: activity}:
+	default:
+	}
+}
+
 func (r *reporter) StageFinished(types.StageName, int, string, error) {}
-func (r *reporter) StageActivity(string)                              {}
 func (r *reporter) StageNote(string)                                  {}

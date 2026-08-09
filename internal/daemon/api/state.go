@@ -57,11 +57,11 @@ type Run struct {
 	Repo string `json:"repo"`
 
 	// Title is the first line of the task, for display only
-	Title  string `json:"title"`
-	Status Status `json:"status"`
+	Title    string `json:"title"`
+	Status   Status `json:"status"`
+	Activity string `json:"activity,omitempty"`
 
-	// Reason explains a non-obvious status: why a queued run has not started
-	// ("repo busy"), or why one was cancelled
+	// Reason explains a non-obvious status
 	Reason string `json:"reason,omitempty"`
 
 	Attempt  int `json:"attempt,omitempty"`
@@ -99,4 +99,13 @@ func (r Run) Clone() Run {
 type Snapshot struct {
 	At   time.Time `json:"at"`
 	Runs []Run     `json:"runs"`
+}
+
+func IsFinilised(s Status) bool {
+	switch s {
+	case StatusSucceeded, StatusRejected, StatusFailed, StatusCancelled:
+		return true
+	default:
+		return false
+	}
 }

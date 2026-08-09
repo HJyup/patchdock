@@ -4,17 +4,19 @@ const (
 	ProtocolHeader = "X-Patchdock-Protocol"
 )
 
+// GET /health
 type HealthResponse struct {
 	Status string `json:"status"`
 	Uptime string `json:"uptime"`
 	PID    int    `json:"pid"`
 }
 
-type SubmitRequest struct {
+// POST /run
+type RunRequest struct {
 	Repo   string `json:"repo"`
 	Prompt string `json:"prompt"`
 }
 
-type SubmitResponse struct {
+type RunResponse struct {
 	RunID string `json:"run_id"`
 }

@@ -62,7 +62,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		return out, fmt.Errorf("planner stage: %w", err)
 	}
 
-	p.reporter.StageNote(plan.Summary)
+	p.reporter.StageSummary(plan.Summary)
 	audit.Planned(plan)
 
 	wks, err := workspace.NewWorkspace(p.repoDir, dir.WorkspacePath())
@@ -119,7 +119,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 			return out, fmt.Errorf("reviewer stage: %w", err)
 		}
 
-		p.reporter.StageNote(rev.Summary)
+		p.reporter.StageSummary(rev.Summary)
 		history.AddReview(rev)
 
 		if rev.Decision == types.ReviewAccept {

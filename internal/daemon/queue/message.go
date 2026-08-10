@@ -28,7 +28,6 @@ type activityMsg struct {
 	text  string
 }
 
-// summaryMsg carries prose worth keeping: a plan, or a review verdict
 type summaryMsg struct {
 	runID string
 	text  string

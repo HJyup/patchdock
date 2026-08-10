@@ -20,3 +20,9 @@ type RunRequest struct {
 type RunResponse struct {
 	RunID string `json:"run_id"`
 }
+
+// Returned from SSE events
+type SnapshotReponse struct {
+	Event string   `json:"event"`
+	Data  Snapshot `json:"data"`
+}

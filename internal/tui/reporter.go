@@ -27,13 +27,10 @@ func (r *Reporter) StageActivity(activity string) {
 	r.progress.Detail(activity)
 }
 
-func (r *Reporter) StageNote(note string) {
-	r.progress.Note(note)
+func (r *Reporter) StageSummary(summary string) {
+	r.progress.Note(summary)
 }
 
-// stageLabel renders the name column. The attempt is printed from the second
-// onward: a snapshot has room for one stage and one number, so the count cannot
-// be left to the reader to infer from repeated rows
 func stageLabel(stage types.StageName, attempt int) string {
 	name := string(stage)
 	if name != "" {

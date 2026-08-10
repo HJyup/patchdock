@@ -2,11 +2,8 @@ package cli
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
-	"github.com/HJyup/patchdock/internal/app"
-	"github.com/HJyup/patchdock/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -23,30 +20,39 @@ const (
 	exitNoDaemon = 3
 )
 
+var (
+	rootDetach bool
+	rootRepo   string
+)
+
 var rootCmd = &cobra.Command{
-	Use:          "dock",
+	Use:          "dock [prompt]",
 	SilenceUsage: true,
 	Short:        "Run agents against your repo: plan, execute, review — in Docker",
-	Long: `Patchdock runs a task through planner → executor → reviewer, each
+	Long: `Patchdock runs tasks through planner → executor → reviewer, each
 			stage in its own container with typed validation between them.
-			Run without arguments to be prompted for a task.`,
+			Without arguments, opens the interactive surface: type a task to
+			queue it, queue as many as you like, tab to the live dashboard.
+			With an inline prompt, queues it and prints the run id — the
+			detached, scriptable form.`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		if !tui.Interactive(os.Stdin, os.Stdout) {
-			return errors.New("no task given, and this is not a terminal to ask on — pass one with `dock run -p \"...\"`")
+		if len(args) == 1 {
+			return submitDetached(ctx, rootRepo, args[0])
+		}
+		if rootDetach {
+			return errors.New(`--detach needs an inline prompt: dock -d "…"`)
 		}
 
-		prompt, err := tui.Prompt(os.Stdin, os.Stdout)
-		if errors.Is(err, tui.ErrPromptCancelled) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read task: %w", err)
-		}
-
-		return app.RunTask(ctx, prompt)
+		return openApp(ctx, rootRepo, false)
 	},
+}
+
+func init() {
+	rootCmd.Flags().BoolVarP(&rootDetach, "detach", "d", false, "queue the inline prompt and print its run id")
+	rootCmd.Flags().StringVar(&rootRepo, "repo", "", "target a repo other than the current directory")
 }
 
 func Execute() {

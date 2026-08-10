@@ -4,22 +4,16 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/x/ansi"
 )
 
 const (
-	// timeWidth holds the longest elapsed time short() produces before a run
-	// would have hit any sane container timeout
-	timeWidth = 6
-	// limitPressure is the fraction of a limit past which the figure stops being
-	// background information and starts being a warning
+	timeWidth     = 6
 	limitPressure = 0.8
 )
 
-// headerLines renders the run's identity block. Only the task line is
-// truncated: the repo and the log path are the two things a reader may need to
-// copy, so they are never clipped
 func headerLines(info RunInfo, s styles, width int) []string {
 	title := gutter + s.title.Render(info.Repo)
 	if info.RunID != "" {
@@ -39,12 +33,10 @@ func headerLines(info RunInfo, s styles, width int) []string {
 	return lines
 }
 
-// summaryLines renders the closing account of a run: the verdict, what it cost,
-// what it produced, and the one command that picks the work up
 func summaryLines(res Result, s styles) []string {
-	headline, tone := fmt.Sprintf("Accepted on attempt %d", res.Attempts), s.green
+	headline, tone := "Accepted", s.green
 	if !res.Accepted {
-		headline, tone = fmt.Sprintf("Rejected after %s", plural(res.Attempts, "attempt")), s.red
+		headline, tone = "Rejected", s.red
 	}
 
 	lines := []string{fmt.Sprintf("%s%s  %s",
@@ -69,8 +61,6 @@ func summaryLines(res Result, s styles) []string {
 	return lines
 }
 
-// diffStat drops a side that is zero: "+51" says everything "+51 -0" does, and
-// the absent half is one less figure to read past
 func diffStat(res Result, s styles) string {
 	if res.Files == 0 {
 		return ""
@@ -100,8 +90,6 @@ func remaining(s styles, timeout time.Duration, elapsed time.Duration) string {
 	return s.pressure(float64(elapsed), float64(timeout)).Render(coarse(timeout-elapsed) + " left")
 }
 
-// coarse rounds a remaining duration to the unit a reader would act on. A
-// countdown to the second invites watching it rather than the run
 func coarse(d time.Duration) string {
 	switch {
 	case d <= 0:
@@ -111,6 +99,26 @@ func coarse(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
 	}
+}
+
+func oneLine(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+
+	space := true // leading whitespace is skipped by starting "inside" a run
+	for _, r := range text {
+		if r == '\t' || r == '\n' || r == '\r' || unicode.IsSpace(r) || unicode.IsControl(r) {
+			if !space {
+				b.WriteByte(' ')
+				space = true
+			}
+			continue
+		}
+		b.WriteRune(r)
+		space = false
+	}
+
+	return strings.TrimRight(b.String(), " ")
 }
 
 func pad(text string, width int) string {

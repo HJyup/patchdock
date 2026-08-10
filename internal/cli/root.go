@@ -2,9 +2,11 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/HJyup/patchdock/internal/app"
+	"github.com/HJyup/patchdock/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +31,21 @@ var rootCmd = &cobra.Command{
 			stage in its own container with typed validation between them.
 			Run without arguments to be prompted for a task.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return app.RunPromptInput(cmd.Context())
+		ctx := cmd.Context()
+
+		if !tui.Interactive(os.Stdin, os.Stdout) {
+			return errors.New("no task given, and this is not a terminal to ask on — pass one with `dock run -p \"...\"`")
+		}
+
+		prompt, err := tui.Prompt(os.Stdin, os.Stdout)
+		if errors.Is(err, tui.ErrPromptCancelled) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("read task: %w", err)
+		}
+
+		return app.RunTask(ctx, prompt)
 	},
 }
 

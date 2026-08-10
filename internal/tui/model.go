@@ -15,24 +15,19 @@ type (
 	startMsg  struct{ label string }
 	detailMsg struct{ activity string }
 	noteMsg   struct{ text string }
-	finishMsg struct{ note, mark string }
+	finishMsg struct{ mark string }
 )
 
 // minDetail keeps the activity line legible on an implausibly narrow terminal
 const minDetail = 20
 
-// model holds the finished steps rather than handing them to tea.Println.
-// Println commits asynchronously, so the last line of a run races Quit and is
-// lost; keeping the lines in the view makes the final frame authoritative. The
-// cost is that the live region grows with the run, which is bounded here by the
-// pipeline itself: one planner plus two stages per attempt
 type model struct {
 	styles  styles
 	spin    spinner.Model
 	timeout time.Duration
 	info    RunInfo
-	done    []string
 	label   string
+	summary string
 	detail  string
 	started time.Time
 	active  bool
@@ -75,15 +70,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detail = msg.activity
 		return m, nil
 
+	// a note replaces its predecessor: the plan is the run's account of itself
+	// until a reviewer supersedes it with a verdict
 	case noteMsg:
-		m.done = append(m.done, childIndent+m.styles.muted.Render(msg.text))
+		m.summary = msg.text
 		return m, nil
 
 	case finishMsg:
-		if !m.active {
-			return m, nil
-		}
-		m.done = append(m.done, m.commit(msg.mark, msg.note))
 		m.active, m.detail = false, ""
 		return m, nil
 
@@ -102,38 +95,28 @@ func (m model) View() string {
 	if header := headerLines(m.info, m.styles, m.width); len(header) > 0 {
 		fmt.Fprintf(&b, "%s\n\n", strings.Join(header, "\n"))
 	}
-	for _, line := range m.done {
-		fmt.Fprintf(&b, "%s\n", line)
-	}
-
 	if !m.active {
 		return b.String()
 	}
 
 	elapsed := time.Since(m.started)
-	fmt.Fprintf(&b, "%s%s %s %s  %s  %s",
+	fmt.Fprintf(&b, "%s%s %s  %s  %s",
 		gutter,
 		m.spin.View(),
 		m.label,
-		m.styles.blank(noteWidth),
 		m.styles.muted.Render(pad(short(elapsed), timeWidth)),
 		remaining(m.styles, m.timeout, elapsed))
 
-	if m.detail != "" {
-		// Truncation is display-width aware, so a wide rune cannot overflow the
-		// row and force the renderer to reason about a wrap it did not plan
-		activity := ansi.Truncate(m.detail, max(m.width-len(childIndent)-1, minDetail), "…")
-		fmt.Fprintf(&b, "\n%s%s", childIndent, m.styles.muted.Render(activity))
+	for _, line := range []string{m.child(m.summary), m.child(m.detail)} {
+		if line == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "\n%s%s", childIndent, m.styles.muted.Render(line))
 	}
 
 	return b.String()
 }
 
-func (m model) commit(mark, note string) string {
-	return fmt.Sprintf("%s%s %s %s  %s",
-		gutter,
-		mark,
-		m.label,
-		m.styles.noteCell(note, noteWidth),
-		m.styles.muted.Render(short(time.Since(m.started))))
+func (m model) child(text string) string {
+	return ansi.Truncate(oneLine(text), max(m.width-len(childIndent)-1, minDetail), "…")
 }

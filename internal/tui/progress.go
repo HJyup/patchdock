@@ -27,7 +27,6 @@ const (
 const (
 	sucessSign = "✔"
 	rejectSign = "✖"
-	retrySign  = "↻"
 	arrowSign  = "→"
 )
 
@@ -43,7 +42,6 @@ type RunInfo struct {
 // Result is the closing account of a run
 type Result struct {
 	Accepted  bool
-	Attempts  int
 	Duration  time.Duration
 	Branch    string
 	Files     int
@@ -128,8 +126,12 @@ func (p *Progress) Header(info RunInfo) {
 	}
 }
 
-// Start opens a step. Any activity the previous step reported is dropped
+// Start opens a step, closing the previous one first: a stage ending is not
+// reported separately, so the next stage beginning is the signal. Any activity
+// the previous step reported is dropped
 func (p *Progress) Start(label string) {
+	p.commit(p.styles.green.Render(sucessSign))
+
 	p.mu.Lock()
 	p.label, p.started, p.active = label, time.Now(), true
 	live := p.running
@@ -146,7 +148,9 @@ func (p *Progress) Start(label string) {
 // strategy, a reviewer's verdict — so the reason for what happens next survives
 // in scrollback rather than flashing past on the activity line
 func (p *Progress) Note(text string) {
-	if text == "" {
+	// guard on the flattened text: prose that is only whitespace once its
+	// newlines are gone would otherwise reserve a row and render blank
+	if text = oneLine(text); text == "" {
 		return
 	}
 
@@ -175,24 +179,12 @@ func (p *Progress) Detail(activity string) {
 }
 
 // Finish closes the active step: a tick, or a cross when err is set
-func (p *Progress) Finish(note string, err error) {
-	// A failed stage has no meaningful result to report, and whatever the caller
-	// read off a zero value would be misleading next to a cross
-	if err != nil {
-		note = ""
-	}
-
+func (p *Progress) Finish(err error) {
 	mark := p.styles.green.Render(sucessSign)
 	if err != nil {
 		mark = p.styles.red.Render(rejectSign)
 	}
-	p.commit(note, mark)
-}
-
-// FinishRetry closes a step that ran cleanly but whose verdict sends the
-// pipeline round again. A tick here would read as "all good"
-func (p *Progress) FinishRetry(note string) {
-	p.commit(note, p.styles.amber.Render(retrySign))
+	p.commit(mark)
 }
 
 // Summary prints the closing lines of a run. It runs after Close, once the
@@ -214,7 +206,7 @@ func (p *Progress) Muted(text string) string {
 // terminal. Safe to call more than once
 func (p *Progress) Close() {
 	p.closeOnce.Do(func() {
-		p.commit("interrupted", p.styles.red.Render(rejectSign))
+		p.commit(p.styles.red.Render(rejectSign))
 
 		p.mu.Lock()
 		program, running := p.program, p.running
@@ -228,7 +220,7 @@ func (p *Progress) Close() {
 	})
 }
 
-func (p *Progress) commit(note, mark string) {
+func (p *Progress) commit(mark string) {
 	p.mu.Lock()
 	if !p.active {
 		p.mu.Unlock()
@@ -239,13 +231,12 @@ func (p *Progress) commit(note, mark string) {
 	p.mu.Unlock()
 
 	if live {
-		p.program.Send(finishMsg{note: note, mark: mark})
+		p.program.Send(finishMsg{mark: mark})
 		return
 	}
 
-	fmt.Fprintf(p.out, "%s%s %s %s  %s\n",
-		gutter, mark, label, p.styles.noteCell(note, noteWidth),
-		p.styles.muted.Render(short(elapsed)))
+	fmt.Fprintf(p.out, "%s%s %s  %s\n",
+		gutter, mark, label, p.styles.muted.Render(short(elapsed)))
 }
 
 func short(d time.Duration) string {

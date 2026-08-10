@@ -6,7 +6,7 @@ import (
 
 type message interface{ queueMessage() }
 
-type submitMsg struct {
+type addMsg struct {
 	repo string
 	task types.Task
 	res  chan<- string
@@ -17,10 +17,20 @@ type cancelMsg struct {
 	err   chan<- error
 }
 
-type stageStartedMsg struct {
+type stageMsg struct {
 	runID   string
 	stage   types.StageName
 	attempt int
+}
+
+type activityMsg struct {
+	runID string
+	text  string
+}
+
+type summaryMsg struct {
+	runID string
+	text  string
 }
 
 type doneMsg struct {
@@ -30,7 +40,9 @@ type doneMsg struct {
 	cancelled bool
 }
 
-func (submitMsg) queueMessage()       {}
-func (cancelMsg) queueMessage()       {}
-func (stageStartedMsg) queueMessage() {}
-func (doneMsg) queueMessage()         {}
+func (addMsg) queueMessage()      {}
+func (cancelMsg) queueMessage()   {}
+func (stageMsg) queueMessage()    {}
+func (activityMsg) queueMessage() {}
+func (summaryMsg) queueMessage()  {}
+func (doneMsg) queueMessage()     {}

@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 
+	"github.com/HJyup/patchdock/internal/auditlog"
 	"github.com/HJyup/patchdock/internal/types"
 )
 
@@ -14,9 +15,9 @@ type RunSpec struct {
 }
 
 type Outcome struct {
-	Attempts int
 	Accepted bool
 	Branch   string
+	Patch    auditlog.PatchStat
 }
 
 type Runner func(ctx context.Context, spec RunSpec, rep Reporter) (Outcome, error)

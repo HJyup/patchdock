@@ -2,7 +2,6 @@ package tui
 
 import (
 	"io"
-	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -32,30 +31,9 @@ func newStyles(out io.Writer) styles {
 	}
 }
 
-func (s styles) noteCell(text string, width int) string {
-	var style lipgloss.Style
-
-	switch text {
-	case "accept", "success":
-		style = s.green
-	case "reject", "partial", "interrupted":
-		style = s.amber
-	case "failed":
-		style = s.red
-	default:
-		style = s.muted
-	}
-
-	return style.Width(width).Render(text)
-}
-
 func (s styles) pressure(used, limit float64) lipgloss.Style {
 	if limit > 0 && used >= limit*limitPressure {
 		return s.amber
 	}
 	return s.muted
-}
-
-func (s styles) blank(width int) string {
-	return strings.Repeat(" ", width)
 }

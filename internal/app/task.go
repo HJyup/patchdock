@@ -68,8 +68,6 @@ func RunTask(ctx context.Context, prompt string) error {
 		return fmt.Errorf("check image %q: %w. Is the Docker daemon running", imageTag, err)
 	}
 
-	// The logger comes up before the first frame so the header can point at the
-	// log directory: a run that dies early is exactly the one whose logs you want
 	runID := fmt.Sprintf("%s-%s", task.ID, time.Now().Format("20060102-150405"))
 	logger, err := auditlog.New(runID, patchdockDir)
 	if err != nil {
@@ -112,6 +110,8 @@ func RunTask(ctx context.Context, prompt string) error {
 
 	p := pipeline.New(cfg, repoDir, runner, logger, reporter)
 	outcome, err := p.Run(ctx, task)
+
+	progress.Finish(err)
 	progress.Close()
 
 	if err != nil {
@@ -120,7 +120,6 @@ func RunTask(ctx context.Context, prompt string) error {
 
 	progress.Summary(tui.Result{
 		Accepted:  outcome.Accepted,
-		Attempts:  outcome.Attempts,
 		Duration:  time.Since(started),
 		Branch:    outcome.Branch,
 		Files:     outcome.Patch.Files,
@@ -162,7 +161,7 @@ func buildImage(ctx context.Context, cli *docker.Client, imageTag, patchdockDir 
 	}
 
 	res := <-result
-	progress.Finish("", res.Err)
+	progress.Finish(res.Err)
 
 	if res.Err != nil {
 		fmt.Fprint(os.Stderr, buildLog.String())

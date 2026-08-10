@@ -10,9 +10,6 @@ import (
 	"github.com/HJyup/patchdock/internal/docker"
 )
 
-// Resolve turns the credentials declared in config.yml into mounts and
-// environment shared by every stage container. Host paths are resolved and
-// checked here so a missing credential fails before the first container starts.
 func Resolve(creds []config.Credential) ([]docker.Mount, map[string]string, error) {
 	mounts := make([]docker.Mount, 0, len(creds))
 	env := make(map[string]string)

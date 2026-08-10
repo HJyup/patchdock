@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -49,6 +50,20 @@ func (c *Client) Health(ctx context.Context) (api.HealthResponse, error) {
 	var out api.HealthResponse
 	err := c.do(ctx, http.MethodGet, path, nil, &out)
 	return out, err
+}
+
+// Bounded to GET, since we don't use anything for it right now (in the furute newRequest + newStream should be refactored)
+func (c *Client) newStreamRequest(ctx context.Context, path string) (*http.Request, error) {
+	url := baseURL + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request for %s: %w", path, err)
+	}
+
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Cache-Control", "no-cache")
+
+	return req, nil
 }
 
 func (c *Client) newRequest(ctx context.Context, method, path string, in any) (*http.Request, error) {
@@ -102,6 +117,63 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	}
 
 	return nil
+}
+
+func (c *Client) stream(ctx context.Context, path string, handler func(snapshot api.Snapshot) error) error {
+	req, err := c.newStreamRequest(ctx, path)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return DeamonError(err)
+	}
+	defer resp.Body.Close()
+
+	if err := checkStatus(resp); err != nil {
+		return err
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType string
+
+	for scanner.Scan() {
+		line := scanner.Bytes()
+
+		if value, ok := bytes.CutPrefix(line, []byte("event: ")); ok {
+			eventType = string(bytes.TrimSpace(value))
+			continue
+		}
+
+		if data, ok := bytes.CutPrefix(line, []byte("data: ")); ok {
+			switch eventType {
+			case api.EventError:
+				var e api.ErrorEvent
+
+				if err := json.Unmarshal(data, &e); err != nil {
+					return fmt.Errorf("unmarshal error event data: %w", err)
+				}
+
+				return fmt.Errorf("daemon stream: %s", e.Message)
+
+			case api.EventSnapshot:
+				var snapshot api.Snapshot
+
+				if err := json.Unmarshal(data, &snapshot); err != nil {
+					return fmt.Errorf("unmarshal snapshot event data: %w", err)
+				}
+
+				if err := handler(snapshot); err != nil {
+					return err
+				}
+			}
+
+			eventType = ""
+		}
+	}
+
+	return scanner.Err()
 }
 
 func checkStatus(resp *http.Response) error {

@@ -26,15 +26,11 @@ var runCmd = &cobra.Command{
 		//   with -d:  print the run id on stdout, hints on stderr, exit 0.
 		//   without:  subscribe to this run's events, render, and exit with the
 		//             run's outcome code.
-		if runDetach || runRepo != "" {
+		if runDetach || runRepo != "" || runPrompt == "" {
 			return errNotImplemented
 		}
 
-		if runPrompt != "" {
-			return app.RunTask(cmd.Context(), runPrompt)
-		}
-
-		return app.RunPromptInput(cmd.Context())
+		return app.RunTask(cmd.Context(), runPrompt)
 	},
 }
 

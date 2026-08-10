@@ -54,8 +54,3 @@ BACKLOG.MD
 # Executable
 patchdock
 .DS_Store
-
-# Working files
-ARCHITECTURE.md
-COMPARISON.MD
-architecture-diagram.png

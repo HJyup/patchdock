@@ -25,7 +25,6 @@ const (
 	fallbackCols = 80
 	// minDetail keeps truncated lines legible on an implausibly narrow terminal
 	minDetail = 20
-	timeWidth = 6
 )
 
 const (

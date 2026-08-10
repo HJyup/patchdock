@@ -17,10 +17,6 @@ import (
 	"github.com/HJyup/patchdock/internal/daemon/api"
 )
 
-// titleMax caps the task column so one long prompt cannot push every status
-// off screen
-const titleMax = 44
-
 // StreamFunc feeds the dashboard. It should block, calling onSnapshot for
 // every snapshot, until ctx is cancelled or the stream breaks
 type StreamFunc func(ctx context.Context, onSnapshot func(api.Snapshot) error) error
@@ -155,12 +151,14 @@ func (m watchModel) View() string {
 			m.styles.muted.Render(`no runs — queue one with dock run -p "…"`))
 
 	default:
-		titleWidth := m.titleWidth()
 		for _, group := range groupRuns(m.runs) {
 			fmt.Fprintf(&b, "\n%s%s\n", gutter, m.styles.strong.Render(group.name))
 
+			// every run gets a blank line above it: rows carry two lines of
+			// their own, so without the gap neighbouring runs read as one block
 			for _, run := range group.runs {
-				b.WriteString(m.runLine(run, titleWidth))
+				b.WriteString("\n")
+				b.WriteString(m.runLine(run))
 				if child := m.childLine(run); child != "" {
 					fmt.Fprintf(&b, "%s%s\n", childIndent, child)
 				}
@@ -198,21 +196,29 @@ func (m watchModel) pinFooter(body string) string {
 	return body + footer
 }
 
-func (m watchModel) runLine(run api.Run, titleWidth int) string {
-	title := ansi.Truncate(oneLine(run.Title), titleWidth, "…")
-
-	line := fmt.Sprintf("%s%s %s  %s  %s",
+// runLine leads with the state, the way a log line leads with its level: the
+// mark and status form a fixed column, the title reads after them, and the
+// elapsed time sets against the right margin, mirroring the header
+func (m watchModel) runLine(run api.Run) string {
+	left := fmt.Sprintf("%s%s %s  ",
 		subIndent,
 		m.mark(run.Status),
-		pad(title, titleWidth),
-		m.statusWord(run.Status),
-		m.styles.muted.Render(pad(short(elapsed(run, time.Now())), timeWidth)))
+		m.statusWord(run.Status))
 
+	attempt := ""
 	if run.Attempt > 1 {
-		line += m.styles.muted.Render(fmt.Sprintf(" (attempt %d)", run.Attempt))
+		attempt = m.styles.muted.Render(fmt.Sprintf("  attempt %d", run.Attempt))
 	}
 
-	return line + "\n"
+	right := m.styles.muted.Render(short(elapsed(run, time.Now())))
+
+	avail := m.width - ansi.StringWidth(left) - ansi.StringWidth(attempt) -
+		ansi.StringWidth(right) - 2 - len(gutter)
+	title := ansi.Truncate(oneLine(run.Title), max(avail, minDetail), "…")
+
+	line := left + title + attempt
+	gap := max(m.width-ansi.StringWidth(line)-ansi.StringWidth(right)-len(gutter), 2)
+	return line + strings.Repeat(" ", gap) + right + "\n"
 }
 
 // childLine picks the one line of context a run deserves under its row: live
@@ -278,23 +284,23 @@ func (m watchModel) mark(status api.Status) string {
 // across rows
 const statusWidth = len(api.StatusPublishing)
 
-// statusWord keeps colour for outcomes only. A working run already announces
-// itself through the spinner; painting its status too made every busy row
-// compete with the wordmark
+// statusWord is the one place the accent appears per row: blue means
+// something is happening right now. Outcomes keep their own colours — except
+// succeeded, whose ✔ already says everything, so the word stays quiet — and
+// only failure keeps a loud one, since failed and rejected share a mark and
+// the word is what tells the two kinds of no apart
 func (m watchModel) statusWord(status api.Status) string {
 	word := pad(string(status), statusWidth)
 
 	switch status {
-	case api.StatusQueued:
+	case api.StatusQueued, api.StatusSucceeded:
 		return m.styles.muted.Render(word)
-	case api.StatusSucceeded:
-		return m.styles.green.Render(word)
 	case api.StatusFailed, api.StatusRejected:
 		return m.styles.red.Render(word)
 	case api.StatusCancelled:
 		return m.styles.amber.Render(word)
 	default:
-		return word
+		return m.styles.accent.Render(word)
 	}
 }
 
@@ -326,19 +332,6 @@ func (m watchModel) tally() string {
 		return "idle"
 	}
 	return strings.Join(parts, " · ")
-}
-
-// titleWidth sizes the task column to its content, within what the terminal
-// and titleMax leave for it
-func (m watchModel) titleWidth() int {
-	widest := 0
-	for _, run := range m.runs {
-		widest = max(widest, ansi.StringWidth(oneLine(run.Title)))
-	}
-
-	// subIndent, the mark, the status and elapsed columns, and their gaps
-	overhead := len(subIndent) + 2 + 2 + statusWidth + 2 + timeWidth
-	return max(min(widest, titleMax, m.width-overhead), minDetail)
 }
 
 // elapsed reports the time a run has spent on the phase it is in: waiting if

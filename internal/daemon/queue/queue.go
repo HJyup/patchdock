@@ -34,7 +34,7 @@ type run struct {
 
 type Queue struct {
 	inbox  chan message
-	Snaps  chan api.Snapshot
+	snaps  chan api.Snapshot
 	runner Runner
 
 	// defines retention policy for finilised runs
@@ -52,7 +52,7 @@ type Queue struct {
 func New(cfg Config) *Queue {
 	return &Queue{
 		inbox:  make(chan message, inboxSize),
-		Snaps:  make(chan api.Snapshot, 1),
+		snaps:  make(chan api.Snapshot, 1),
 		runner: cfg.Runner,
 
 		retention: cfg.Retention,
@@ -66,7 +66,7 @@ func (q *Queue) Run(ctx context.Context) {
 
 	ticker := time.NewTicker(publishInterval)
 	defer ticker.Stop()
-	defer close(q.Snaps)
+	defer close(q.snaps)
 
 	q.publish()
 	for {
@@ -86,6 +86,10 @@ func (q *Queue) Run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (q *Queue) Snaps() <-chan api.Snapshot {
+	return q.snaps
 }
 
 func (q *Queue) Add(ctx context.Context, repo string, task types.Task) (string, error) {
@@ -297,11 +301,11 @@ func (q *Queue) publish() {
 	snap := q.snapshot()
 
 	select {
-	case <-q.Snaps:
+	case <-q.snaps:
 	default:
 	}
 
-	q.Snaps <- snap
+	q.snaps <- snap
 }
 
 func (q *Queue) snapshot() api.Snapshot {

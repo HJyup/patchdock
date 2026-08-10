@@ -92,19 +92,19 @@ func (q *Queue) Snaps() <-chan api.Snapshot {
 	return q.snaps
 }
 
-func (q *Queue) Add(ctx context.Context, repo string, task types.Task) (string, error) {
+func (q *Queue) Add(repo string, task types.Task) (string, error) {
 	res := make(chan string, 1)
 	select {
 	case q.inbox <- addMsg{repo: filepath.Clean(repo), task: task, res: res}:
-	case <-ctx.Done():
-		return "", ctx.Err()
+	case <-q.ctx.Done():
+		return "", q.ctx.Err()
 	}
 
 	select {
 	case id := <-res:
 		return id, nil
-	case <-ctx.Done():
-		return "", ctx.Err()
+	case <-q.ctx.Done():
+		return "", q.ctx.Err()
 	}
 }
 

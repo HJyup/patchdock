@@ -98,17 +98,3 @@ func plural(n int, noun string) string {
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
 }
-
-// tildePath abbreviates the home directory so repo paths stay short enough to
-// share a line with the repo name
-func tildePath(path string) string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return path
-	}
-
-	if rest, ok := strings.CutPrefix(path, home); ok && (rest == "" || rest[0] == os.PathSeparator) {
-		return "~" + rest
-	}
-	return path
-}

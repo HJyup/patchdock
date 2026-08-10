@@ -36,10 +36,13 @@ func Watch(ctx context.Context, in io.Reader, out io.Writer, stream StreamFunc) 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// The dashboard owns the whole terminal while it is open, like any
+	// long-lived monitor, and hands the scrollback base state on quit
 	program := tea.NewProgram(
 		newWatchModel(newStyles(out)),
 		tea.WithInput(in),
 		tea.WithOutput(out),
+		tea.WithAltScreen(),
 	)
 
 	// The stream owns one channel send; the program is told to quit on
@@ -86,6 +89,7 @@ type watchModel struct {
 	runs   []api.Run
 	seen   bool // one snapshot has arrived; an empty list now means "no runs"
 	width  int
+	height int
 }
 
 func newWatchModel(s styles) watchModel {
@@ -105,6 +109,9 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		if msg.Width > 0 {
 			m.width = msg.Width
+		}
+		if msg.Height > 0 {
+			m.height = msg.Height
 		}
 		return m, nil
 
@@ -137,36 +144,58 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m watchModel) View() string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "%s%s  %s\n",
-		gutter, m.styles.title.Render("patchdock"), m.styles.muted.Render(m.tally()))
+	fmt.Fprintf(&b, "\n%s\n", m.header())
 
-	if !m.seen {
-		fmt.Fprintf(&b, "\n%s%s\n", subIndent, m.styles.muted.Render("connecting…"))
-		return b.String()
-	}
-	if len(m.runs) == 0 {
-		fmt.Fprintf(&b, "\n%s%s\n", subIndent,
+	switch {
+	case !m.seen:
+		fmt.Fprintf(&b, "\n%s%s\n", gutter, m.styles.muted.Render("connecting…"))
+
+	case len(m.runs) == 0:
+		fmt.Fprintf(&b, "\n%s%s\n", gutter,
 			m.styles.muted.Render(`no runs — queue one with dock run -p "…"`))
-		return b.String()
-	}
 
-	titleWidth := m.titleWidth()
-	for _, group := range groupRuns(m.runs) {
-		fmt.Fprintf(&b, "\n%s%s  %s\n",
-			gutter,
-			m.styles.accent.Render(group.name),
-			m.styles.muted.Render(tildePath(group.path)))
+	default:
+		titleWidth := m.titleWidth()
+		for _, group := range groupRuns(m.runs) {
+			fmt.Fprintf(&b, "\n%s%s\n", gutter, m.styles.strong.Render(group.name))
 
-		for _, run := range group.runs {
-			b.WriteString(m.runLine(run, titleWidth))
-			if child := m.childLine(run); child != "" {
-				fmt.Fprintf(&b, "%s%s\n", childIndent, child)
+			for _, run := range group.runs {
+				b.WriteString(m.runLine(run, titleWidth))
+				if child := m.childLine(run); child != "" {
+					fmt.Fprintf(&b, "%s%s\n", childIndent, child)
+				}
 			}
 		}
 	}
 
-	fmt.Fprintf(&b, "\n%s%s\n", gutter, m.styles.muted.Render("q to quit"))
-	return b.String()
+	return m.pinFooter(b.String())
+}
+
+// header sets the wordmark against the tally, one on each margin, the way a
+// status bar reads: identity left, numbers right
+func (m watchModel) header() string {
+	left := gutter + m.styles.title.Render("patchdock")
+	tally := m.styles.muted.Render(m.tally())
+
+	gap := m.width - ansi.StringWidth(left) - ansi.StringWidth(tally) - len(gutter)
+	if gap < 2 {
+		return left + "  " + tally
+	}
+	return left + strings.Repeat(" ", gap) + tally
+}
+
+// pinFooter holds the quit hint on the bottom row of the screen, however
+// short the run list is
+func (m watchModel) pinFooter(body string) string {
+	footer := gutter + m.styles.muted.Render("q to quit")
+
+	if fill := m.height - strings.Count(body, "\n") - 2; fill > 0 {
+		body += strings.Repeat("\n", fill)
+	} else {
+		body += "\n"
+	}
+
+	return body + footer
 }
 
 func (m watchModel) runLine(run api.Run, titleWidth int) string {
@@ -249,6 +278,9 @@ func (m watchModel) mark(status api.Status) string {
 // across rows
 const statusWidth = len(api.StatusPublishing)
 
+// statusWord keeps colour for outcomes only. A working run already announces
+// itself through the spinner; painting its status too made every busy row
+// compete with the wordmark
 func (m watchModel) statusWord(status api.Status) string {
 	word := pad(string(status), statusWidth)
 
@@ -262,7 +294,7 @@ func (m watchModel) statusWord(status api.Status) string {
 	case api.StatusCancelled:
 		return m.styles.amber.Render(word)
 	default:
-		return m.styles.accent.Render(word)
+		return word
 	}
 }
 
@@ -326,12 +358,13 @@ func elapsed(run api.Run, now time.Time) time.Duration {
 
 type repoGroup struct {
 	name string
-	path string
 	runs []api.Run
 }
 
 // groupRuns buckets runs by repo, repos alphabetically and each repo's runs
-// oldest first, so rows keep stable positions as snapshots replace each other
+// oldest first, so rows keep stable positions as snapshots replace each
+// other. Only the repo's base name is shown: the full path said little at the
+// cost of a line's worth of noise per group
 func groupRuns(runs []api.Run) []repoGroup {
 	byRepo := make(map[string][]api.Run)
 	for _, run := range runs {
@@ -350,7 +383,6 @@ func groupRuns(runs []api.Run) []repoGroup {
 
 		groups = append(groups, repoGroup{
 			name: path[strings.LastIndexByte(path, '/')+1:],
-			path: path,
 			runs: bucket,
 		})
 	}

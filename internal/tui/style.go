@@ -13,6 +13,7 @@ type styles struct {
 	red    lipgloss.Style
 	muted  lipgloss.Style
 	title  lipgloss.Style
+	strong lipgloss.Style
 }
 
 func newStyles(out io.Writer) styles {
@@ -28,5 +29,6 @@ func newStyles(out io.Writer) styles {
 		red:    colour("203"),
 		muted:  colour("245"), // elapsed times, activity, paths
 		title:  colour("39").Bold(true),
+		strong: renderer.NewStyle().Bold(true),
 	}
 }

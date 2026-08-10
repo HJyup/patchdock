@@ -57,7 +57,7 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) error {
 	go q.Run(ctx)
 	go b.Run(ctx)
 
-	service := NewService(q, dir)
+	service := NewService(q, dir, b)
 	router := NewRouter(service)
 	srv := &http.Server{
 		Handler:           router,

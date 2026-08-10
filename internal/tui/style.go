@@ -30,10 +30,3 @@ func newStyles(out io.Writer) styles {
 		title:  colour("39").Bold(true),
 	}
 }
-
-func (s styles) pressure(used, limit float64) lipgloss.Style {
-	if limit > 0 && used >= limit*limitPressure {
-		return s.amber
-	}
-	return s.muted
-}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/HJyup/patchdock/internal/app"
 	"github.com/HJyup/patchdock/internal/tui"
 	"github.com/spf13/cobra"
 )
@@ -45,7 +44,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("read task: %w", err)
 		}
 
-		return app.RunTask(ctx, prompt)
+		return submitRun(ctx, "", prompt, false)
 	},
 }
 

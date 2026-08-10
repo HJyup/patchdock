@@ -1,5 +1,77 @@
 # patchdock
 
+Patchdock is a local control plane for running a planner, executor, and reviewer
+against a repository in isolated Docker containers. Client applications submit
+work to one daemon, which owns run state and the execution pipeline.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph clients["Client applications"]
+        CLI["dock CLI and TUI"]
+        MCP["MCP server<br/>client adapter"]
+    end
+
+    subgraph daemon["Patchdock daemon process"]
+        Lifecycle["daemon lifecycle"]
+        Socket["Unix socket<br/>HTTP/JSON + SSE"]
+        API["daemon API and service"]
+        Queue["run queue and state"]
+        Broker["snapshot broker"]
+        Runner["pipeline runner"]
+
+        Lifecycle --> Socket
+        Socket --> API
+        API --> Queue
+        Queue --> Runner
+        Queue --> Broker
+        Broker -->|"live snapshots"| API
+    end
+
+    subgraph execution["Per-run execution"]
+        Config["config package<br/>.patchdock/config.yml"]
+        Pipeline["pipeline package"]
+        Planner["planner stage"]
+        Executor["executor stage"]
+        Reviewer["reviewer stage"]
+        Workspace["temporary Git workspace"]
+        Audit["audit logs and patch artifacts"]
+
+        Config -->|"stages, limits, retries"| Pipeline
+        Pipeline --> Planner
+        Planner --> Executor
+        Executor --> Reviewer
+        Reviewer -->|"changes requested"| Executor
+        Pipeline --> Workspace
+        Pipeline --> Audit
+    end
+
+    Docker["Docker Engine<br/>isolated agent containers"]
+    Repo["target repository<br/>.patchdock/"]
+
+    CLI -->|"submit and watch"| Socket
+    MCP -->|"same local API"| Socket
+    CLI -.->|"starts on demand"| Lifecycle
+    Runner --> Config
+    Runner --> Pipeline
+    Pipeline -.->|"stage and activity reports"| Queue
+    Planner --> Docker
+    Executor --> Docker
+    Reviewer --> Docker
+    Repo --> Config
+    Repo --> Workspace
+    Planner --> Audit
+    Executor --> Audit
+    Reviewer --> Audit
+```
+
+The CLI is the implemented client in this repository. The MCP server is shown
+as an adapter at the same boundary: it should use the daemon's local API instead
+of invoking the pipeline or Docker directly. The daemon loads repository
+configuration, queues each run, executes the pipeline, and streams live state
+back to connected clients.
+
 ## Commands
 
 | Command | What it does |

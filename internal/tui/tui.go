@@ -1,7 +1,3 @@
-// Package tui renders patchdock's terminal surfaces: the task prompt, the
-// post-submit choice, and the watch dashboard that follows every run the
-// daemon reports. On anything that is not a terminal the interactive surfaces
-// refuse to open rather than degrade into escape sequences
 package tui
 
 import (
@@ -16,15 +12,12 @@ import (
 )
 
 const (
-	// gutter is the left margin every line is printed against
-	gutter = "  "
-	// subIndent nests the lines belonging to a block's own title
+	gutter      = "  "
 	subIndent   = gutter + "  "
 	childIndent = gutter + "    "
 
 	fallbackCols = 80
-	// minDetail keeps truncated lines legible on an implausibly narrow terminal
-	minDetail = 20
+	minDetail    = 20
 )
 
 const (
@@ -96,4 +89,26 @@ func plural(n int, noun string) string {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
 	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+func tildePath(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+
+	if rest, ok := strings.CutPrefix(path, home); ok && (rest == "" || rest[0] == os.PathSeparator) {
+		return "~" + rest
+	}
+	return path
+}
+
+func pinFooter(body, footer string, height int) string {
+	if fill := height - strings.Count(body, "\n") - 2; fill > 0 {
+		body += strings.Repeat("\n", fill)
+	} else {
+		body += "\n"
+	}
+
+	return body + footer
 }

@@ -1,10 +1,7 @@
 package tui
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"slices"
 	"strings"
@@ -17,90 +14,25 @@ import (
 	"github.com/HJyup/patchdock/internal/daemon/api"
 )
 
-// StreamFunc feeds the dashboard. It should block, calling onSnapshot for
-// every snapshot, until ctx is cancelled or the stream breaks
-type StreamFunc func(ctx context.Context, onSnapshot func(api.Snapshot) error) error
-
-// Watch runs the dashboard until the user quits or the stream fails. Every
-// snapshot replaces the whole view: the daemon publishes full state, so there
-// is nothing to accumulate client-side
-func Watch(ctx context.Context, in io.Reader, out io.Writer, stream StreamFunc) error {
-	if !Interactive(in, out) {
-		return errors.New("dock watch needs a terminal")
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// The dashboard owns the whole terminal while it is open, like any
-	// long-lived monitor, and hands the scrollback base state on quit
-	program := tea.NewProgram(
-		newWatchModel(newStyles(out)),
-		tea.WithInput(in),
-		tea.WithOutput(out),
-		tea.WithAltScreen(),
-	)
-
-	// The stream owns one channel send; the program is told to quit on
-	// failure so Run below unblocks and the error surfaces after cleanup
-	streamErr := make(chan error, 1)
-	go func() {
-		err := stream(ctx, func(snap api.Snapshot) error {
-			program.Send(snapshotMsg{snap: snap})
-			return nil
-		})
-
-		if ctx.Err() != nil { // the user quit; whatever the stream says is noise
-			streamErr <- nil
-			return
-		}
-		if err == nil {
-			err = errors.New("daemon closed the stream")
-		}
-
-		streamErr <- err
-		program.Send(streamFailedMsg{})
-	}()
-
-	_, runErr := program.Run()
-	cancel()
-
-	if err := <-streamErr; err != nil {
-		return fmt.Errorf("watch runs: %w", err)
-	}
-	if runErr != nil && !errors.Is(runErr, tea.ErrInterrupted) && !errors.Is(runErr, tea.ErrProgramKilled) {
-		return runErr
-	}
-	return nil
-}
-
-type (
-	snapshotMsg     struct{ snap api.Snapshot }
-	streamFailedMsg struct{}
-)
-
 type watchModel struct {
 	styles styles
 	spin   spinner.Model
 	runs   []api.Run
 	seen   bool // one snapshot has arrived; an empty list now means "no runs"
+	footer string
 	width  int
 	height int
 }
 
-func newWatchModel(s styles) watchModel {
+func newWatchModel(s styles, footer string) watchModel {
 	spin := spinner.New()
 	spin.Spinner = spinner.MiniDot
 	spin.Style = s.accent
 
-	return watchModel{styles: s, spin: spin, width: fallbackCols}
+	return watchModel{styles: s, spin: spin, footer: footer, width: fallbackCols}
 }
 
-func (m watchModel) Init() tea.Cmd {
-	return m.spin.Tick
-}
-
-func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m watchModel) update(msg tea.Msg) (watchModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		if msg.Width > 0 {
@@ -111,23 +43,11 @@ func (m watchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			return m, tea.Quit
-		}
-		return m, nil
-
 	case snapshotMsg:
 		m.runs = msg.snap.Runs
 		m.seen = true
 		return m, nil
 
-	case streamFailedMsg:
-		return m, tea.Quit
-
-	// the spinner tick doubles as the clock: every frame repaints, so the
-	// elapsed columns advance without a timer of their own
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
@@ -166,11 +86,9 @@ func (m watchModel) View() string {
 		}
 	}
 
-	return m.pinFooter(b.String())
+	return pinFooter(b.String(), gutter+m.styles.muted.Render(m.footer), m.height)
 }
 
-// header sets the wordmark against the tally, one on each margin, the way a
-// status bar reads: identity left, numbers right
 func (m watchModel) header() string {
 	left := gutter + m.styles.title.Render("patchdock")
 	tally := m.styles.muted.Render(m.tally())
@@ -182,23 +100,6 @@ func (m watchModel) header() string {
 	return left + strings.Repeat(" ", gap) + tally
 }
 
-// pinFooter holds the quit hint on the bottom row of the screen, however
-// short the run list is
-func (m watchModel) pinFooter(body string) string {
-	footer := gutter + m.styles.muted.Render("q to quit")
-
-	if fill := m.height - strings.Count(body, "\n") - 2; fill > 0 {
-		body += strings.Repeat("\n", fill)
-	} else {
-		body += "\n"
-	}
-
-	return body + footer
-}
-
-// runLine leads with the state, the way a log line leads with its level: the
-// mark and status form a fixed column, the title reads after them, and the
-// elapsed time sets against the right margin, mirroring the header
 func (m watchModel) runLine(run api.Run) string {
 	left := fmt.Sprintf("%s%s %s  ",
 		subIndent,
@@ -221,11 +122,6 @@ func (m watchModel) runLine(run api.Run) string {
 	return line + strings.Repeat(" ", gap) + right + "\n"
 }
 
-// childLine picks the one line of context a run deserves under its row: live
-// activity while it works, the patch it published once it has, and the
-// summary — plan or failure — otherwise. Free text is flattened and truncated
-// before any styling, so escape sequences never reach oneLine's control-rune
-// filter
 func (m watchModel) childLine(run api.Run) string {
 	if run.Status == api.StatusSucceeded {
 		if stat := m.patchStat(run); stat != "" {
@@ -244,8 +140,6 @@ func (m watchModel) childLine(run api.Run) string {
 	return m.styles.muted.Render(ansi.Truncate(text, max(m.width-len(childIndent)-1, minDetail), "…"))
 }
 
-// patchStat is assembled from bounded parts rather than free text, so it is
-// returned styled and skips the flattening above
 func (m watchModel) patchStat(run api.Run) string {
 	if run.Patch == nil || run.Patch.Files == 0 {
 		return ""
@@ -280,15 +174,8 @@ func (m watchModel) mark(status api.Status) string {
 	}
 }
 
-// statusWidth fits the longest status name, so the elapsed column lines up
-// across rows
 const statusWidth = len(api.StatusPublishing)
 
-// statusWord is the one place the accent appears per row: blue means
-// something is happening right now. Outcomes keep their own colours — except
-// succeeded, whose ✔ already says everything, so the word stays quiet — and
-// only failure keeps a loud one, since failed and rejected share a mark and
-// the word is what tells the two kinds of no apart
 func (m watchModel) statusWord(status api.Status) string {
 	word := pad(string(status), statusWidth)
 
@@ -334,8 +221,6 @@ func (m watchModel) tally() string {
 	return strings.Join(parts, " · ")
 }
 
-// elapsed reports the time a run has spent on the phase it is in: waiting if
-// queued, working if started, and its total working time once finished
 func elapsed(run api.Run, now time.Time) time.Duration {
 	switch {
 	case run.FinishedAt != nil && run.StartedAt != nil:
@@ -354,10 +239,6 @@ type repoGroup struct {
 	runs []api.Run
 }
 
-// groupRuns buckets runs by repo, repos alphabetically and each repo's runs
-// oldest first, so rows keep stable positions as snapshots replace each
-// other. Only the repo's base name is shown: the full path said little at the
-// cost of a line's worth of noise per group
 func groupRuns(runs []api.Run) []repoGroup {
 	byRepo := make(map[string][]api.Run)
 	for _, run := range runs {

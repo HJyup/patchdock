@@ -29,9 +29,12 @@ type StreamFunc func(ctx context.Context, onSnapshot func(api.Snapshot) error) e
 // SubmitFunc queues one task and returns its run id
 type SubmitFunc func(ctx context.Context, prompt string) (string, error)
 
+type CancelFunc func(ctx context.Context, runID string) error
+
 type AppOptions struct {
 	Repo         string
 	Submit       SubmitFunc
+	Cancel       CancelFunc
 	Stream       StreamFunc
 	StartOnWatch bool
 }
@@ -87,6 +90,11 @@ type (
 	streamFailedMsg struct{}
 	queuedMsg       struct{ id, title string }
 	submitFailedMsg struct{ err error }
+	cancelledMsg    struct{ id string }
+	cancelFailedMsg struct {
+		id  string
+		err error
+	}
 )
 
 type appMode int
@@ -106,6 +114,7 @@ type appModel struct {
 	ctx    context.Context
 	styles styles
 	submit SubmitFunc
+	cancel CancelFunc
 	repo   string
 
 	mode  appMode
@@ -133,14 +142,20 @@ func newAppModel(ctx context.Context, s styles, opts AppOptions) appModel {
 		mode = modeWatch
 	}
 
+	footer := "tab new task · q quit"
+	if opts.Cancel != nil {
+		footer = "tab new task · c cancel · q quit"
+	}
+
 	return appModel{
 		ctx:    ctx,
 		styles: s,
 		submit: opts.Submit,
+		cancel: opts.Cancel,
 		repo:   tildePath(opts.Repo),
 		mode:   mode,
 		input:  input,
-		watch:  newWatchModel(s, "tab new task · q quit"),
+		watch:  newWatchModel(s, footer),
 		width:  fallbackCols,
 	}
 }
@@ -173,6 +188,14 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case submitFailedMsg:
 		return m.noted(note{err: msg.err}), nil
+
+	case cancelledMsg:
+		m.watch = m.watch.withNotice("")
+		return m, nil
+
+	case cancelFailedMsg:
+		m.watch = m.watch.withNotice(fmt.Sprintf("cancel %s: %v", msg.id, msg.err))
+		return m, nil
 
 	case streamFailedMsg:
 		return m, tea.Quit
@@ -211,12 +234,50 @@ func (m appModel) promptKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m appModel) watchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.watch = m.watch.withNotice("") // any key clears a stale failure
+
+	if m.watch.selecting {
+		return m.cancelKeys(msg)
+	}
+
 	switch msg.String() {
 	case "tab", "n":
 		m.mode = modePrompt
 		return m, textinput.Blink
 
+	case "c":
+		if m.cancel != nil {
+			m.watch = m.watch.startSelecting()
+		}
+		return m, nil
+
 	case "q", "esc", "ctrl+c":
+		return m, tea.Quit
+	}
+
+	return m, nil
+}
+
+func (m appModel) cancelKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		m.watch = m.watch.move(-1)
+
+	case "down", "j":
+		m.watch = m.watch.move(1)
+
+	case "enter":
+		run, ok := m.watch.selected()
+		m.watch = m.watch.stopSelecting()
+		if !ok {
+			return m, nil
+		}
+		return m, m.cancelCmd(run.ID)
+
+	case "c", "esc", "q":
+		m.watch = m.watch.stopSelecting()
+
+	case "ctrl+c":
 		return m, tea.Quit
 	}
 
@@ -230,6 +291,15 @@ func (m appModel) submitCmd(prompt string) tea.Cmd {
 			return submitFailedMsg{err: err}
 		}
 		return queuedMsg{id: id, title: prompt}
+	}
+}
+
+func (m appModel) cancelCmd(runID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.cancel(m.ctx, runID); err != nil {
+			return cancelFailedMsg{id: runID, err: err}
+		}
+		return cancelledMsg{id: runID}
 	}
 }
 

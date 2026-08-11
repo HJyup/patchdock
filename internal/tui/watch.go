@@ -15,13 +15,17 @@ import (
 )
 
 type watchModel struct {
-	styles styles
-	spin   spinner.Model
-	runs   []api.Run
-	seen   bool // one snapshot has arrived; an empty list now means "no runs"
-	footer string
-	width  int
-	height int
+	styles    styles
+	spin      spinner.Model
+	runs      []api.Run
+	seen      bool // one snapshot has arrived; an empty list now means "no runs"
+	footer    string
+	width     int
+	height    int
+	selecting bool
+	cursorID  string
+	cursor    int
+	notice    string
 }
 
 func newWatchModel(s styles, footer string) watchModel {
@@ -46,7 +50,7 @@ func (m watchModel) update(msg tea.Msg) (watchModel, tea.Cmd) {
 	case snapshotMsg:
 		m.runs = msg.snap.Runs
 		m.seen = true
-		return m, nil
+		return m.syncCursor(), nil
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -55,6 +59,83 @@ func (m watchModel) update(msg tea.Msg) (watchModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m watchModel) cancellable() []api.Run {
+	var live []api.Run
+	for _, group := range groupRuns(m.runs) {
+		for _, run := range group.runs {
+			if !api.IsFinilised(run.Status) {
+				live = append(live, run)
+			}
+		}
+	}
+	return live
+}
+
+func (m watchModel) startSelecting() watchModel {
+	live := m.cancellable()
+	if len(live) == 0 {
+		return m.withNotice("nothing to cancel")
+	}
+
+	m.selecting = true
+	m.cursor = 0
+	m.cursorID = live[0].ID
+	m.notice = ""
+	return m
+}
+
+func (m watchModel) stopSelecting() watchModel {
+	m.selecting = false
+	m.cursorID = ""
+	m.cursor = 0
+	return m
+}
+
+func (m watchModel) move(delta int) watchModel {
+	live := m.cancellable()
+	if len(live) == 0 {
+		return m.stopSelecting()
+	}
+
+	m.cursor = min(max(m.cursor+delta, 0), len(live)-1)
+	m.cursorID = live[m.cursor].ID
+	return m
+}
+
+func (m watchModel) selected() (api.Run, bool) {
+	for _, run := range m.cancellable() {
+		if run.ID == m.cursorID {
+			return run, true
+		}
+	}
+	return api.Run{}, false
+}
+
+func (m watchModel) syncCursor() watchModel {
+	if !m.selecting {
+		return m
+	}
+
+	live := m.cancellable()
+	if len(live) == 0 {
+		return m.stopSelecting()
+	}
+
+	if i := slices.IndexFunc(live, func(r api.Run) bool { return r.ID == m.cursorID }); i >= 0 {
+		m.cursor = i
+		return m
+	}
+
+	m.cursor = min(m.cursor, len(live)-1)
+	m.cursorID = live[m.cursor].ID
+	return m
+}
+
+func (m watchModel) withNotice(text string) watchModel {
+	m.notice = text
+	return m
 }
 
 func (m watchModel) View() string {
@@ -78,7 +159,7 @@ func (m watchModel) View() string {
 			// their own, so without the gap neighbouring runs read as one block
 			for _, run := range group.runs {
 				b.WriteString("\n")
-				b.WriteString(m.runLine(run))
+				b.WriteString(m.runLine(run, m.selecting && run.ID == m.cursorID))
 				if child := m.childLine(run); child != "" {
 					fmt.Fprintf(&b, "%s%s\n", childIndent, child)
 				}
@@ -86,7 +167,22 @@ func (m watchModel) View() string {
 		}
 	}
 
-	return pinFooter(b.String(), gutter+m.styles.muted.Render(m.footer), m.height)
+	return pinFooter(b.String(), gutter+m.footerLine(), m.height)
+}
+
+func (m watchModel) footerLine() string {
+	switch {
+	case m.notice != "":
+		room := max(m.width-len(gutter), minDetail)
+		return m.styles.red.Render(ansi.Truncate(oneLine(m.notice), room, "…"))
+
+	case m.selecting:
+		return m.styles.amber.Render("cancel") + "  " +
+			m.styles.muted.Render("↑↓ select · enter cancel · esc back")
+
+	default:
+		return m.styles.muted.Render(m.footer)
+	}
 }
 
 func (m watchModel) header() string {
@@ -100,9 +196,14 @@ func (m watchModel) header() string {
 	return left + strings.Repeat(" ", gap) + tally
 }
 
-func (m watchModel) runLine(run api.Run) string {
+func (m watchModel) runLine(run api.Run, cursor bool) string {
+	head := subIndent
+	if cursor {
+		head = gutter + m.styles.accent.Render(promptSign)
+	}
+
 	left := fmt.Sprintf("%s%s %s  ",
-		subIndent,
+		head,
 		m.mark(run.Status),
 		m.statusWord(run.Status))
 
@@ -116,6 +217,9 @@ func (m watchModel) runLine(run api.Run) string {
 	avail := m.width - ansi.StringWidth(left) - ansi.StringWidth(attempt) -
 		ansi.StringWidth(right) - 2 - len(gutter)
 	title := ansi.Truncate(oneLine(run.Title), max(avail, minDetail), "…")
+	if cursor {
+		title = m.styles.strong.Render(title)
+	}
 
 	line := left + title + attempt
 	gap := max(m.width-ansi.StringWidth(line)-ansi.StringWidth(right)-len(gutter), 2)

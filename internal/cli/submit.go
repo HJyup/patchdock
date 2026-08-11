@@ -82,6 +82,7 @@ func openApp(ctx context.Context, repo string, startOnWatch bool) error {
 			resp, err := c.Run(ctx, api.RunRequest{Repo: repo, Prompt: prompt})
 			return resp.RunID, err
 		},
+		Cancel:       c.Cancel,
 		Stream:       c.StreamRuns,
 		StartOnWatch: startOnWatch,
 	})

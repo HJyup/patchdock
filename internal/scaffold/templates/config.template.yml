@@ -16,9 +16,6 @@ container:
   # Maximum tokens a single container may spend. Set to 0 for no token limit.
   token_budget: 100000
 
-  # Maximum number of containers running at once across a fan-out. Set to 0 for no limit.
-  max_containers: 4
-
 # Total number of executor + reviewer rounds a run may perform before it gives
 # up. 1 means a single attempt with no retry; 2 lets the executor be re-run once
 # after the reviewer rejects. Every round is another full executor + reviewer

@@ -59,14 +59,14 @@ hold **one** snapshot, and newer replaces older.
 ### The queue
 
 A single goroutine owns the entire run table. All communication goes through
-a buffered inbox channel of typed messages: submit, cancel, stage change,
-activity, summary, done. Submitting is a request/reply message, where the
+a buffered inbox channel of typed events: submit, cancel, stage change,
+activity, summary, done. Submitting is a request/reply event, where the
 caller sends the task with a reply channel and blocks until the queue assigns
 a run ID.
 
 Because one goroutine serialises every mutation, there are no locks and no
 data races by construction. Pipeline goroutines report progress by sending
-messages into the same inbox.
+events into the same inbox.
 
 The queue publishes changes on a fixed 200ms tick: each
 mutation only marks the state dirty, and the ticker clones the run table
@@ -111,7 +111,7 @@ sequenceDiagram
     B-->>H: replay last snapshot
     H->>C: event: snapshot
 
-    P->>Q: stage / activity / done message
+    P->>Q: stage / activity / done event
     Q->>Q: apply to run table, mark dirty
     Note over Q: 200ms tick: evict expired runs,<br/>publish snapshot if dirty
     Q->>B: snapshot (1-buffered, latest wins)

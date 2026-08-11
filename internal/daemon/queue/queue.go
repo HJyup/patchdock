@@ -33,7 +33,7 @@ type run struct {
 }
 
 type Queue struct {
-	inbox  chan message
+	inbox  chan event
 	snaps  chan api.Snapshot
 	runner Runner
 
@@ -51,7 +51,7 @@ type Queue struct {
 
 func New(ctx context.Context, cfg Config) *Queue {
 	return &Queue{
-		inbox:  make(chan message, inboxSize),
+		inbox:  make(chan event, inboxSize),
 		snaps:  make(chan api.Snapshot, 1),
 		runner: cfg.Runner,
 
@@ -73,8 +73,8 @@ func (q *Queue) Run() {
 		case <-q.ctx.Done():
 			return
 
-		case msg := <-q.inbox:
-			q.handle(msg)
+		case event := <-q.inbox:
+			q.handle(event)
 
 		case <-ticker.C:
 			q.evict()
@@ -94,7 +94,7 @@ func (q *Queue) Snaps() <-chan api.Snapshot {
 func (q *Queue) Add(repo string, task types.Task) (string, error) {
 	res := make(chan string, 1)
 	select {
-	case q.inbox <- addMsg{repo: filepath.Clean(repo), task: task, res: res}:
+	case q.inbox <- addEvent{repo: filepath.Clean(repo), task: task, res: res}:
 	case <-q.ctx.Done():
 		return "", q.ctx.Err()
 	}
@@ -111,7 +111,7 @@ func (q *Queue) Cancel(ctx context.Context, runID string) error {
 	reply := make(chan error, 1)
 
 	select {
-	case q.inbox <- cancelMsg{runID: runID, err: reply}:
+	case q.inbox <- cancelEvent{runID: runID, err: reply}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -124,34 +124,34 @@ func (q *Queue) Cancel(ctx context.Context, runID string) error {
 	}
 }
 
-func (q *Queue) handle(msg message) {
-	switch m := msg.(type) {
-	case addMsg:
-		q.add(m)
-	case cancelMsg:
-		q.cancel(m)
-	case stageMsg:
-		q.stage(m)
-	case activityMsg:
-		q.activity(m)
-	case summaryMsg:
-		q.summary(m)
-	case doneMsg:
-		q.done(m)
+func (q *Queue) handle(ev event) {
+	switch e := ev.(type) {
+	case addEvent:
+		q.add(e)
+	case cancelEvent:
+		q.cancel(e)
+	case stageEvent:
+		q.stage(e)
+	case activityEvent:
+		q.activity(e)
+	case summaryEvent:
+		q.summary(e)
+	case doneEvent:
+		q.done(e)
 	}
 }
 
-func (q *Queue) add(m addMsg) {
+func (q *Queue) add(e addEvent) {
 	ctx, cancel := context.WithCancel(q.ctx)
 	id := utils.NewID("run")
 
 	r := &run{
-		task: m.task,
+		task: e.task,
 		state: &api.Run{
 			ID:       id,
-			TaskID:   m.task.ID,
-			Repo:     m.repo,
-			Title:    utils.FirstLine(m.task.Description),
+			TaskID:   e.task.ID,
+			Repo:     e.repo,
+			Title:    utils.FirstLine(e.task.Description),
 			Status:   api.StatusQueued,
 			QueuedAt: time.Now(),
 		},
@@ -163,7 +163,7 @@ func (q *Queue) add(m addMsg) {
 	// TODO: This is where the scheduler will come into place
 	// Right now it's sequential
 
-	m.res <- id
+	e.res <- id
 	q.cancels[r.state.ID] = cancel
 
 	now := time.Now()
@@ -178,34 +178,34 @@ func (q *Queue) add(m addMsg) {
 	})
 }
 
-func (q *Queue) cancel(m cancelMsg) {
-	r, ok := q.runs[m.runID]
+func (q *Queue) cancel(e cancelEvent) {
+	r, ok := q.runs[e.runID]
 	if !ok {
-		m.err <- ErrNotFound
+		e.err <- ErrNotFound
 		return
 	}
 
 	if api.IsFinilised(r.state.Status) {
-		m.err <- ErrFinished
+		e.err <- ErrFinished
 		return
 	}
 
-	if cancel, ok := q.cancels[m.runID]; ok {
+	if cancel, ok := q.cancels[e.runID]; ok {
 		cancel()
 	}
 
-	m.err <- nil
+	e.err <- nil
 }
 
-func (q *Queue) stage(m stageMsg) {
-	r, ok := q.runs[m.runID]
+func (q *Queue) stage(e stageEvent) {
+	r, ok := q.runs[e.runID]
 	if !ok {
 		return
 	}
 
-	r.state.Status = api.StatusForStage(m.stage)
-	if m.attempt > 0 {
-		r.state.Attempt = m.attempt
+	r.state.Status = api.StatusForStage(e.stage)
+	if e.attempt > 0 {
+		r.state.Attempt = e.attempt
 	}
 
 	now := time.Now()
@@ -215,32 +215,32 @@ func (q *Queue) stage(m stageMsg) {
 	q.dirty = true
 }
 
-func (q *Queue) activity(m activityMsg) {
-	r, ok := q.runs[m.runID]
+func (q *Queue) activity(e activityEvent) {
+	r, ok := q.runs[e.runID]
 	if !ok || api.IsFinilised(r.state.Status) {
 		return
 	}
 
-	if r.state.Activity == m.text {
+	if r.state.Activity == e.text {
 		return
 	}
 
-	r.state.Activity = m.text
+	r.state.Activity = e.text
 	q.dirty = true
 }
 
-func (q *Queue) summary(m summaryMsg) {
-	r, ok := q.runs[m.runID]
-	if !ok || r.state.Summary == m.text {
+func (q *Queue) summary(e summaryEvent) {
+	r, ok := q.runs[e.runID]
+	if !ok || r.state.Summary == e.text {
 		return
 	}
 
-	r.state.Summary = m.text
+	r.state.Summary = e.text
 	q.dirty = true
 }
 
-func (q *Queue) done(m doneMsg) {
-	r, ok := q.runs[m.runID]
+func (q *Queue) done(e doneEvent) {
+	r, ok := q.runs[e.runID]
 	if !ok {
 		return
 	}
@@ -250,29 +250,29 @@ func (q *Queue) done(m doneMsg) {
 	r.state.Activity = ""
 
 	switch {
-	case m.cancelled:
+	case e.cancelled:
 		r.state.Status = api.StatusCancelled
-	case m.err != nil:
+	case e.err != nil:
 		r.state.Status = api.StatusFailed
-		r.state.Summary = m.err.Error()
+		r.state.Summary = e.err.Error()
 	default:
-		patch := m.out.Patch
+		patch := e.out.Patch
 		r.state.Patch = &patch
-		if m.out.Accepted {
+		if e.out.Accepted {
 			r.state.Status = api.StatusSucceeded
-			r.state.Branch = m.out.Branch
+			r.state.Branch = e.out.Branch
 		} else {
 			r.state.Status = api.StatusRejected
 		}
 	}
 
-	delete(q.cancels, m.runID)
+	delete(q.cancels, e.runID)
 	q.dirty = true
 }
 
 func (q *Queue) execute(ctx context.Context, spec RunSpec) {
 	out, err := q.runner(ctx, spec, &reporter{queue: q, runID: spec.RunID})
-	msg := doneMsg{
+	event := doneEvent{
 		runID:     spec.RunID,
 		out:       out,
 		err:       err,
@@ -280,7 +280,7 @@ func (q *Queue) execute(ctx context.Context, spec RunSpec) {
 	}
 
 	select {
-	case q.inbox <- msg:
+	case q.inbox <- event:
 	case <-q.ctx.Done():
 	}
 }

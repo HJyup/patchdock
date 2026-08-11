@@ -149,7 +149,7 @@ func (m watchModel) View() string {
 
 	case len(m.runs) == 0:
 		fmt.Fprintf(&b, "\n%s%s\n", gutter,
-			m.styles.muted.Render(`no runs — queue one with dock run -p "…"`))
+			m.styles.muted.Render(`no runs — queue one with dock "…"`))
 
 	default:
 		for _, group := range groupRuns(m.runs) {

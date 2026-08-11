@@ -1,16 +1,13 @@
 # Patchdock
 
-Patchdock turns a prompt into a reviewed patch. Describe a task, and planner,
-executor, and reviewer agents work through it inside an isolated Docker
-container; the result lands as a commit on a `patchdock/…` branch in your
-repository, ready to review and merge. A local daemon owns the queue and
-execution, so you can batch tasks across repositories, close the terminal,
-and follow everything from one live dashboard.
+Patchdock turns a prompt into a reviewed patch. Describe a task, and agents
+work through it inside an isolated Docker container; the result lands as a
+commit on a `patchdock/…` branch in your repository, ready to review and merge.
 
 ## How it works
 
 The `dock` CLI talks to a local daemon over a unix socket. The daemon queues
-runs, drives Docker execution, and streams live state back to the dashboard.
+runs, drives Docker execution, and streams live state back to the clients.
 
 Every task moves through three agents: the planner produces a plan, the
 executor applies it to the repository, and the reviewer judges the changes.
@@ -50,6 +47,11 @@ stateDiagram-v2
 ```
 
 ## Getting started
+
+> [!NOTE]
+> Patchdock is not yet distributed through Homebrew or npm. Distribution will
+> be added after critical work is complete, including Docker runtime
+> hardening, cancellation support, and daemon lifecycle improvements.
 
 Building Patchdock requires Go; running it requires a Docker Engine. Install
 the `dock` binary from source:
@@ -97,13 +99,12 @@ dock
 ### Dockerfile
 
 Each repository owns a `.patchdock/Dockerfile`. It defines the isolated
-environment in which the planner, executor, and reviewer operate, so it can be
-adapted to the repository instead of relying on tools installed on the host.
+environment in which the planner, executor, and reviewer operate.
 
 Add everything the agents need to build, test, and inspect the repository:
 language runtimes, package managers, compilers, system libraries, project tools,
 and prewarmed dependencies. These additions become part of the agent image and
-are available consistently during every stage.
+are available during every stage.
 
 ### config.yml
 
@@ -174,7 +175,7 @@ Opens the terminal interface directly on the live dashboard.
 ### Submit a detached task
 
 ```console
-$ dock -d "Update the API error handling"
+dock -d "Update the API error handling"
 run-4e6b30262e44
 ```
 
@@ -199,15 +200,9 @@ it directly:
 | `dock daemon run` | Run the daemon in the foreground for debugging. |
 | `dock daemon stop` | Signal the running daemon to stop and wait for it to exit. |
 
-## Status
-
-Patchdock is not yet distributed through Homebrew or npm. Distribution will be
-added after critical work is complete, including Docker runtime hardening,
-cancellation support, and daemon lifecycle improvements.
-
 ## References
 
-- [Architecture](./ARCHITECTURE.md) — how Patchdock works in detail: the
-  daemon, the live state feed, and the anatomy of a pipeline run.
-- [Patchdock Agent SDK](./sdk/README.md) — agent contracts, custom
+- [Architecture](./ARCHITECTURE.md): how Patchdock works in detail, covering
+  the daemon, the live state feed, and the anatomy of a pipeline run.
+- [Patchdock Agent SDK](./sdk/README.md): agent contracts, custom
   implementations, runtime context, and configuration details.

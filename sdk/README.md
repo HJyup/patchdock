@@ -16,33 +16,21 @@ but its output must satisfy the stage contract so the next pipeline stage can co
 
 ## Installation
 
-Install the SDK directly in a TypeScript project:
+`dock init` is the recommended way to begin: it scaffolds `.patchdock/` with starter
+agent files already matched to the runtime configuration. See
+[Getting started](../README.md#getting-started).
+
+To add the SDK to an existing TypeScript project instead:
 
 ```bash
 pnpm add @patchdock/sdk
 ```
 
-Or initialize a repository from the main Patchdock instance:
-
-```bash
-dock init
-```
-
-`dock init` creates `.patchdock/config.yml` and starter files for the planner,
-executor, and reviewer. This is the recommended way to begin because the generated files
-match the Patchdock runtime configuration.
-
 ## Define agents and their contracts
 
-Patchdock has three stage definitions:
-
-- `definePlanner`
-- `defineExecutor`
-- `defineReviewer`
-
-Every configured agent file must default-export the matching definition. The examples
-below use the built-in Codex adapter while keeping the context and typed input available
-for project-specific logic.
+Every agent file must default-export one of the three stage definitions:
+`definePlanner`, `defineExecutor`, or `defineReviewer`. The examples below use the
+built-in Codex adapter.
 
 ### `definePlanner`
 
@@ -75,7 +63,7 @@ type PlannerRun = (ctx: StageContext, input: PlannerInput) => Promise<PlanData>;
 
 Patchdock adds the plan ID, task ID, and creation timestamp after the planner returns.
 
-Structure inside `body` — approach, ordered steps, acceptance criteria — is a prompt
+Structure inside `body` (approach, ordered steps, acceptance criteria) is a prompt
 convention for the executor and reviewer to read, not a schema. Keep the conventional
 headings so downstream stages know where to look.
 
@@ -178,17 +166,9 @@ export default defineExecutor({
 ```
 
 The built-in model adapter is optional. A definition can instead run any code the project
-needs:
-
-- Read and transform the typed input.
-- Inspect the preassigned stage context.
-- Read from the stage's mounted repository or workspace.
-- Call a different model provider.
-- Use a local model.
-- Call tools, services, or project-specific functions.
-- Combine deterministic logic with model output.
-
-For example, a project can replace the Codex adapter with its own executor:
+needs: a different provider, a local model, project-specific tools and services, or
+deterministic logic combined with model output. For example, a project can replace the
+Codex adapter with its own executor:
 
 ```typescript
 import {
@@ -211,37 +191,24 @@ async function run(
 export default defineExecutor({ run });
 ```
 
-Patchdock does not prescribe how the agent reasons or produces its answer. The strict
-boundary is the returned output: it must satisfy `PlanData`, `ExecutionResultData`, or
-`ReviewData` for the pipeline to continue.
+The strict boundary is the returned output: it must satisfy `PlanData`,
+`ExecutionResultData`, or `ReviewData` for the pipeline to continue.
 
 ## Supported models
 
 | Model  | Status   | Import           |
 | ------ | -------- | ---------------- |
 | Codex  | Built in | `@patchdock/sdk` |
-| Claude | Planned  | —                |
+| Claude | Planned  | n/a              |
 
-Built-in agents will use the same context and contracts as custom agents. Switching from
-a custom implementation to a supported model should not require changes to the
-surrounding pipeline.
+Built-in adapters use the same context and contracts as custom agents, so swapping
+between them requires no changes to the surrounding pipeline.
 
 ## Into the details
 
-### Define your own agent
+### How an agent is loaded
 
-An agent file is a TypeScript module with one default export:
-
-```typescript
-import { definePlanner } from "@patchdock/sdk";
-import { runPlanner } from "./planner-implementation";
-
-export default definePlanner({
-  run: runPlanner,
-});
-```
-
-The configured filename must match the stage mapping in `.patchdock/config.yml`:
+Each agent filename must match the stage mapping in `.patchdock/config.yml`:
 
 ```yaml
 stages:
@@ -250,10 +217,7 @@ stages:
   reviewer: reviewer.ts
 ```
 
-Agent `run` functions are asynchronous. They receive `ctx` first and the stage input
-second. Their returned value is the only typed output passed back to Patchdock.
-
-The main Patchdock instance consumes an agent as follows:
+The main Patchdock instance then consumes the file as follows:
 
 ```text
 write typed input
@@ -324,16 +288,15 @@ from `run` is passed to the pipeline.
 
 ### Runtime toolchains
 
-The standard agent image targets TypeScript and JavaScript repositories. It includes Node.js
-22, npm, pnpm, `tsx`, Git, `rg`, `fd`, `jq`, `curl`, and common archive/process utilities.
-Python 3 and native build tools are present for Node dependencies that compile through
-`node-gyp`; they are not advertised as a separate target-repository toolchain. The image
-publishes this inventory to the Codex prompt so the agent knows what it can use.
+The scaffolded agent image targets TypeScript and JavaScript repositories: Debian
+Bookworm with Node.js 22, npm, `tsx`, Git, ripgrep, `make`, and `curl`, and no C
+toolchain, Python, or other language runtime. `PATCHDOCK_TOOLCHAIN_SUMMARY` in the
+Dockerfile is injected verbatim into every agent prompt, so a repository that needs a
+different toolchain must extend the image and that summary together.
 
 Codex is also instructed to inspect repository manifests and lockfiles, prefer existing
-repository scripts, run focused checks after editing, and report missing tools or unrun checks
-instead of implying verification succeeded. Use a separate project-specific image when a target
-repository requires a non-Node toolchain such as Go, Java, Rust, or Python application tooling.
+repository scripts, run focused checks after editing, and report missing tools or unrun
+checks instead of implying verification succeeded.
 
 ### Mounts
 
@@ -347,19 +310,10 @@ Mounts are capabilities assigned by the main Patchdock runtime:
 | All stages   | `/agents`    | Read-only  | Load configured agent modules                          |
 | Runtime only | `/io`        | Read-write | Exchange validated input and output JSON               |
 
-Use the context paths instead of hardcoding mount locations:
-
-```typescript
-const repoPath = ctx.paths.repo;
-const workspacePath = ctx.paths.workspace;
-```
-
-Only use the path assigned to the current stage. A conventional path value does not mean
-that the corresponding directory is mounted for every stage.
-
-Changes made outside `/workspace` are container-local and disappear when the container
-is removed. Executor changes must be written under `ctx.paths.workspace` so Patchdock
-can extract them.
+Read locations from `ctx.paths` instead of hardcoding them, and only use the path
+assigned to the current stage. Changes made outside `/workspace` are container-local and
+disappear with the container, so executor edits must be written under
+`ctx.paths.workspace` for Patchdock to extract them.
 
 ### Contract and validation rules
 
@@ -383,9 +337,6 @@ The main rules agent authors need to respect are:
   non-empty `feedback` (accepted reviews may include it for non-blocking notes).
 - Do not return runtime-owned IDs, timestamps, stage relationships, or the executor patch.
 - Write executor file changes only into the writable workspace.
-
-Inside those boundaries, custom agents are free to parse input, call models, use tools,
-and organize their behaviour however the project requires.
 
 ## Development checks
 

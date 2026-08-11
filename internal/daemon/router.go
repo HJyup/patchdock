@@ -56,6 +56,7 @@ func (rt *Router) run(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrInvalidUserPayload) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 		http.Error(w, fmt.Sprintf("failed to submit work: %v", err), http.StatusInternalServerError)
 		return

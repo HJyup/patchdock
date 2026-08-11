@@ -61,6 +61,14 @@ func (s *Service) Run(ctx context.Context, repo string, prompt string) (api.RunR
 	return api.RunResponse{RunID: id}, nil
 }
 
+func (s *Service) Cancel(ctx context.Context, runID string) error {
+	if runID == "" {
+		return fmt.Errorf("%w: run id is required", ErrInvalidUserPayload)
+	}
+
+	return s.queue.Cancel(ctx, runID)
+}
+
 func (s *Service) Snapshot(ctx context.Context) (<-chan api.Snapshot, <-chan error) {
 	data := make(chan api.Snapshot)
 	errs := make(chan error, 1)

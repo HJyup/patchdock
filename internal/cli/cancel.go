@@ -1,6 +1,11 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
+
+	"github.com/HJyup/patchdock/internal/daemon/client"
+	"github.com/HJyup/patchdock/internal/runtimedir"
 	"github.com/spf13/cobra"
 )
 
@@ -11,11 +16,21 @@ var cancelCmd = &cobra.Command{
 			cancelled run stops at its current stage and its container is removed.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO: client.Cancel(args[0]).
-		//
-		// No auto-start: if there is no daemon there is nothing to cancel, so
-		// report that rather than starting one.
-		return errNotImplemented
+		dir, err := runtimedir.Default()
+		if err != nil {
+			return err
+		}
+
+		runID := args[0]
+		if err := client.New(dir.Socket()).Cancel(cmd.Context(), runID); err != nil {
+			if errors.Is(err, client.ErrNoDaemon) || errors.Is(err, client.ErrNotListening) {
+				return errNoDaemon
+			}
+			return err
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "cancelled %s\n", runID)
+		return nil
 	},
 }
 

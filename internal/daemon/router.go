@@ -9,12 +9,14 @@ import (
 	"net/http"
 
 	"github.com/HJyup/patchdock/internal/daemon/api"
+	"github.com/HJyup/patchdock/internal/daemon/queue"
 )
 
 type service interface {
 	Health(ctx context.Context) api.HealthResponse
 	Snapshot(ctx context.Context) (<-chan api.Snapshot, <-chan error)
 	Run(ctx context.Context, repo string, prompt string) (api.RunResponse, error)
+	Cancel(ctx context.Context, runID string) error
 }
 
 type Router struct {
@@ -28,6 +30,7 @@ func NewRouter(service service) http.Handler {
 	rt.mux.HandleFunc("GET /health", rt.health)
 	rt.mux.HandleFunc("GET /run", rt.stream)
 	rt.mux.HandleFunc("POST /run", rt.run)
+	rt.mux.HandleFunc("DELETE /run/{runID}", rt.cancel)
 
 	return rt
 }
@@ -60,6 +63,33 @@ func (rt *Router) run(w http.ResponseWriter, r *http.Request) {
 
 	rt.writeJSON(w, http.StatusCreated, response)
 
+}
+
+func (rt *Router) cancel(w http.ResponseWriter, r *http.Request) {
+	runID := r.PathValue("runID")
+	if runID == "" {
+		http.Error(w, "run id is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := rt.service.Cancel(r.Context(), runID); err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidUserPayload):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		case errors.Is(err, queue.ErrNotFound):
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		case errors.Is(err, queue.ErrFinished):
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		default:
+			http.Error(w, fmt.Sprintf("failed to cancel run: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (rt *Router) stream(w http.ResponseWriter, r *http.Request) {

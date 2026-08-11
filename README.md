@@ -6,49 +6,6 @@ commit on a `patchdock/…` branch in your repository, ready to review and merge
 
 <img width="1501" height="644" alt="example screen" src="https://github.com/user-attachments/assets/1d36e6ea-a430-4f52-bd9d-b52570dac3a3" />
 
-
-## How it works
-
-The `dock` CLI talks to a local daemon over a unix socket. The daemon queues
-runs, drives Docker execution, and streams live state back to the clients.
-
-Every task moves through three agents: the planner produces a plan, the
-executor applies it to the repository, and the reviewer judges the changes.
-A rejected review sends the task back to the executor until the configured
-retry limit is reached; an accepted review is published as a branch and
-commit.
-
-```mermaid
-stateDiagram-v2
-    [*] --> Planning
-
-    state "Planner agent" as Planning
-    state "Executor agent" as Executing
-    state "Reviewer agent" as Reviewing
-    state "Publish branch" as Publishing
-    state "Run succeeded" as Succeeded
-    state "Run rejected" as Rejected
-    state "Run failed" as Failed
-
-    Planning --> Executing: Valid plan produced
-    Planning --> Failed: Error
-
-    Executing --> Reviewing: Changes and execution result produced
-    Executing --> Failed: Error
-
-    Reviewing --> Publishing: Review accepted
-    Reviewing --> Executing: Changes requested and attempts remain
-    Reviewing --> Rejected: Retry limit reached
-    Reviewing --> Failed: Error
-
-    Publishing --> Succeeded: Branch and commit created
-    Publishing --> Failed: Error
-
-    Succeeded --> [*]
-    Rejected --> [*]
-    Failed --> [*]
-```
-
 ## Getting started
 
 > [!NOTE]
@@ -95,6 +52,48 @@ submit your first task:
 
 ```bash
 dock
+```
+
+## How it works
+
+The `dock` CLI talks to a local daemon over a unix socket. The daemon queues
+runs, drives Docker execution, and streams live state back to the clients.
+
+Every task moves through three agents: the planner produces a plan, the
+executor applies it to the repository, and the reviewer judges the changes.
+A rejected review sends the task back to the executor until the configured
+retry limit is reached; an accepted review is published as a branch and
+commit.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Planning
+
+    state "Planner agent" as Planning
+    state "Executor agent" as Executing
+    state "Reviewer agent" as Reviewing
+    state "Publish branch" as Publishing
+    state "Run succeeded" as Succeeded
+    state "Run rejected" as Rejected
+    state "Run failed" as Failed
+
+    Planning --> Executing: Valid plan produced
+    Planning --> Failed: Error
+
+    Executing --> Reviewing: Changes and execution result produced
+    Executing --> Failed: Error
+
+    Reviewing --> Publishing: Review accepted
+    Reviewing --> Executing: Changes requested and attempts remain
+    Reviewing --> Rejected: Retry limit reached
+    Reviewing --> Failed: Error
+
+    Publishing --> Succeeded: Branch and commit created
+    Publishing --> Failed: Error
+
+    Succeeded --> [*]
+    Rejected --> [*]
+    Failed --> [*]
 ```
 
 ## Configuration

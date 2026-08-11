@@ -125,12 +125,6 @@ controls how many executor and reviewer rounds may run. The configuration also
 selects stage files, declares read-only credential mounts, names the reusable
 agent image, and controls the Git branch prefix.
 
-> [!NOTE]
-> `max_containers` currently exists in the repository configuration for testing
-> purposes. It will move to the daemon's global configuration, where it can
-> enforce one machine-wide concurrency limit across all repositories and
-> clients.
-
 ## Patchdock Agent SDK
 
 The TypeScript files in `.patchdock/` use `@patchdock/sdk` to define typed

@@ -49,21 +49,24 @@ type Queue struct {
 	dirty bool
 }
 
-func New(cfg Config) *Queue {
+func New(ctx context.Context, cfg Config) *Queue {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	return &Queue{
 		inbox:  make(chan message, inboxSize),
 		snaps:  make(chan api.Snapshot, 1),
 		runner: cfg.Runner,
 
 		retention: cfg.Retention,
+		ctx:       ctx,
 		runs:      make(map[string]*run),
 		cancels:   make(map[string]context.CancelFunc),
 	}
 }
 
-func (q *Queue) Run(ctx context.Context) {
-	q.ctx = ctx
-
+func (q *Queue) Run() {
 	ticker := time.NewTicker(publishInterval)
 	defer ticker.Stop()
 	defer close(q.snaps)
@@ -71,7 +74,7 @@ func (q *Queue) Run(ctx context.Context) {
 	q.publish()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-q.ctx.Done():
 			return
 
 		case msg := <-q.inbox:

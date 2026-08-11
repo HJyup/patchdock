@@ -22,9 +22,8 @@ type Credential struct {
 }
 
 type Container struct {
-	Timeout       Duration `yaml:"timeout"`
-	TokenBudget   int      `yaml:"token_budget"`
-	MaxContainers int      `yaml:"max_containers"`
+	Timeout     Duration `yaml:"timeout"`
+	TokenBudget int      `yaml:"token_budget"`
 }
 
 type Retries struct {

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -58,6 +59,12 @@ func (c *Client) Run(ctx context.Context, paylod api.RunRequest) (api.RunRespons
 	var out api.RunResponse
 	err := c.do(ctx, http.MethodPost, path, paylod, &out)
 	return out, err
+}
+
+func (c *Client) Cancel(ctx context.Context, runID string) error {
+	path := "/run/" + url.PathEscape(runID)
+
+	return c.do(ctx, http.MethodDelete, path, nil, nil)
 }
 
 func (c *Client) StreamRuns(ctx context.Context, handler func(snapshot api.Snapshot) error) error {

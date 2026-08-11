@@ -50,10 +50,6 @@ type Queue struct {
 }
 
 func New(ctx context.Context, cfg Config) *Queue {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	return &Queue{
 		inbox:  make(chan message, inboxSize),
 		snaps:  make(chan api.Snapshot, 1),

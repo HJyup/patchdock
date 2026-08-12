@@ -55,47 +55,23 @@ submit your first task:
 dock
 ```
 
-## How it works
+## CLI reference
 
-The `dock` CLI talks to a local daemon over a unix socket. The daemon queues
-runs, drives Docker execution, and streams live state back to the clients.
+| Command | Description |
+| --- | --- |
+| `dock init` | Create the repository's `.patchdock/` directory. Add `--force` to regenerate it, overwriting the existing configuration and agent files. |
+| `dock` | Open the interactive terminal interface on the task input. Submit tasks there and switch to the live dashboard to follow runs across repositories. |
+| `dock watch` | Open the terminal interface directly on the live dashboard. |
+| `dock "<prompt>"` | Queue the task, print its run ID, and exit without opening the terminal interface. Starts the daemon on demand. |
+| `dock --repo <path> "<prompt>"` | Queue the task against another repository instead of the current directory. |
+| `dock cancel <run-id>` | Cancel a queued or running run from any terminal. The run stops at its current stage and its container is removed. |
+| `dock daemon status` | Show daemon health, uptime, process ID, socket, and log path. |
+| `dock daemon run` | Run the daemon in the foreground for debugging. |
+| `dock daemon stop` | Signal the running daemon to stop and wait for it to exit. |
 
-Every task moves through three agents: the planner produces a plan, the
-executor applies it to the repository, and the reviewer judges the changes.
-A rejected review sends the task back to the executor until the configured
-retry limit is reached; an accepted review is published as a branch and
-commit.
-
-```mermaid
-stateDiagram-v2
-    [*] --> Planning
-
-    state "Planner agent" as Planning
-    state "Executor agent" as Executing
-    state "Reviewer agent" as Reviewing
-    state "Publish branch" as Publishing
-    state "Run succeeded" as Succeeded
-    state "Run rejected" as Rejected
-    state "Run failed" as Failed
-
-    Planning --> Executing: Valid plan produced
-    Planning --> Failed: Error
-
-    Executing --> Reviewing: Changes and execution result produced
-    Executing --> Failed: Error
-
-    Reviewing --> Publishing: Review accepted
-    Reviewing --> Executing: Changes requested and attempts remain
-    Reviewing --> Rejected: Retry limit reached
-    Reviewing --> Failed: Error
-
-    Publishing --> Succeeded: Branch and commit created
-    Publishing --> Failed: Error
-
-    Succeeded --> [*]
-    Rejected --> [*]
-    Failed --> [*]
-```
+The daemon owns the run queue, Docker execution, and live state. Clients start
+it automatically when needed; the `dock daemon` commands let you inspect or
+control it directly.
 
 ## Configuration
 
@@ -147,61 +123,47 @@ The table below lists the coding agents that can run inside the container:
 For agent contracts, custom implementations, runtime context, and configuration
 details, read the [Patchdock Agent SDK documentation](./sdk/README.md).
 
-## CLI reference
+## How it works
 
-### Initialise a repository
+The `dock` CLI talks to a local daemon over a unix socket. The daemon queues
+runs, drives Docker execution, and streams live state back to the clients.
 
-```bash
-dock init
+Every task moves through three agents: the planner produces a plan, the
+executor applies it to the repository, and the reviewer judges the changes.
+A rejected review sends the task back to the executor until the configured
+retry limit is reached; an accepted review is published as a branch and
+commit.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Planning
+
+    state "Planner agent" as Planning
+    state "Executor agent" as Executing
+    state "Reviewer agent" as Reviewing
+    state "Publish branch" as Publishing
+    state "Run succeeded" as Succeeded
+    state "Run rejected" as Rejected
+    state "Run failed" as Failed
+
+    Planning --> Executing: Valid plan produced
+    Planning --> Failed: Error
+
+    Executing --> Reviewing: Changes and execution result produced
+    Executing --> Failed: Error
+
+    Reviewing --> Publishing: Review accepted
+    Reviewing --> Executing: Changes requested and attempts remain
+    Reviewing --> Rejected: Retry limit reached
+    Reviewing --> Failed: Error
+
+    Publishing --> Succeeded: Branch and commit created
+    Publishing --> Failed: Error
+
+    Succeeded --> [*]
+    Rejected --> [*]
+    Failed --> [*]
 ```
-
-Creates the repository's `.patchdock/` directory. Use `dock init --force` to
-regenerate it; this overwrites the existing configuration and agent files.
-
-### Open Patchdock
-
-```bash
-dock
-```
-
-Opens the interactive terminal interface on the task input. Submit tasks there
-and switch to the live dashboard to follow runs across repositories.
-
-### Watch runs
-
-```bash
-dock watch
-```
-
-Opens the terminal interface directly on the live dashboard.
-
-### Submit a detached task
-
-```console
-dock "Update the API error handling"
-run-4e6b30262e44
-```
-
-Passing an inline prompt queues the task, starts the daemon on demand if
-necessary, prints the run ID, and exits without opening the terminal interface.
-
-Use `--repo` to target another repository:
-
-```bash
-dock --repo ../another-project "Add request validation"
-```
-
-### Control the daemon
-
-The daemon owns the run queue, Docker execution, and live state. Clients start
-it automatically when needed, while these commands let you inspect or control
-it directly:
-
-| Command | Description |
-| --- | --- |
-| `dock daemon status` | Show daemon health, uptime, process ID, socket, and log path. |
-| `dock daemon run` | Run the daemon in the foreground for debugging. |
-| `dock daemon stop` | Signal the running daemon to stop and wait for it to exit. |
 
 ## References
 

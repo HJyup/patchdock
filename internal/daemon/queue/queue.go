@@ -35,7 +35,7 @@ type run struct {
 
 type queuedTasks struct {
 	ctx   context.Context
-	specs RunSpec
+	runID string
 }
 
 type Queue struct {
@@ -89,9 +89,9 @@ func (q *Queue) Run() {
 
 		case <-ticker.C:
 			q.evict()
+			q.schedule()
 
 			if q.dirty {
-				q.schedule()
 				q.publish()
 				q.dirty = false
 			}
@@ -174,13 +174,7 @@ func (q *Queue) add(e addEvent) {
 	e.res <- id
 	q.cancels[r.state.ID] = cancel
 
-	q.waiting = append(q.waiting, queuedTasks{
-		ctx: ctx,
-		specs: RunSpec{
-			RunID: r.state.ID,
-			Repo:  r.state.Repo,
-			Task:  r.task,
-		}})
+	q.waiting = append(q.waiting, queuedTasks{ctx: ctx, runID: id})
 }
 
 func (q *Queue) cancel(e cancelEvent) {
@@ -291,13 +285,18 @@ func (q *Queue) done(e doneEvent) {
 }
 
 func (q *Queue) schedule() {
-	if q.dirty && q.active() < q.maxContainers && len(q.waiting) > 0 {
-		task := q.waiting[0]
+	for len(q.waiting) > 0 && q.active() < q.maxContainers {
+		queued := q.waiting[0]
 		q.waiting = q.waiting[1:]
 
-		r, ok := q.runs[task.specs.RunID]
+		r, ok := q.runs[queued.runID]
 		if !ok || api.IsFinilised(r.state.Status) {
-			return
+			continue
+		}
+
+		if queued.ctx.Err() != nil {
+			q.done(doneEvent{runID: queued.runID, cancelled: true})
+			continue
 		}
 
 		now := time.Now()
@@ -305,7 +304,7 @@ func (q *Queue) schedule() {
 		r.state.StartedAt = &now
 		q.dirty = true
 
-		go q.execute(task.ctx, RunSpec{
+		go q.execute(queued.ctx, RunSpec{
 			RunID: r.state.ID,
 			Repo:  r.state.Repo,
 			Task:  r.task,

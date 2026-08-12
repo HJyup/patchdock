@@ -27,7 +27,6 @@ const (
 
 type runOptions struct {
 	stage       types.StageName
-	taskID      string
 	dir         string
 	mounts      []docker.Mount
 	attempt     int

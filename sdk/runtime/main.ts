@@ -58,7 +58,7 @@ async function main() {
 
   const ctx: StageContext = {
     stage,
-    taskId: process.env.PATCHDOCK_TASK_ID ?? "",
+    runId: process.env.PATCHDOCK_RUN_ID ?? "",
     // IO is never passed since it's defined by default to agents
     paths: { repo: REPO_PATH, workspace: WORKSPACE_PATH },
     log: (entry) => writeStageLog(stage, entry),

@@ -36,7 +36,7 @@ export default defineExecutor({
     const body = [
       "# Mock run",
       "",
-      `- task: ${ctx.taskId}`,
+      `- run: ${ctx.runId}`,
       `- attempt: ${ctx.attempt} of ${ctx.maxAttempts}`,
       `- plan: ${input.plan.summary}`,
       `- written: ${new Date().toISOString()}`,

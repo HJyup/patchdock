@@ -11,13 +11,13 @@ import { fullPlan, fullExecutionResult, fullReview, task } from "./testing/model
 describe("plannerInputSchema", () => {
   test("accepts a task without title and labels (Go omits empty fields)", () => {
     const result = plannerInputSchema.safeParse({
-      task: { id: "task-1", description: "do the thing" },
+      task: { description: "do the thing" },
     });
     expect(result.success).toBe(true);
   });
 
   test("rejects a task without description", () => {
-    const result = plannerInputSchema.safeParse({ task: { id: "task-1" } });
+    const result = plannerInputSchema.safeParse({ task: {} });
     expect(result.success).toBe(false);
   });
 });
@@ -96,17 +96,17 @@ describe("planDataSchema (planner output)", () => {
     expect(planDataSchema.safeParse({ summary: "s", body: "" }).success).toBe(false);
   });
 
-  test("does not accept id/task_id — identity belongs to the host", () => {
+  test("strips identity fields — the run ID is the only identity", () => {
     const result = planDataSchema.safeParse({
       summary: "s",
       body: "b",
       id: "plan-forged",
-      task_id: "task-forged",
+      run_id: "run-forged",
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data).not.toHaveProperty("id");
-      expect(result.data).not.toHaveProperty("task_id");
+      expect(result.data).not.toHaveProperty("run_id");
     }
   });
 });

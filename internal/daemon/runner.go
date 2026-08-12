@@ -63,6 +63,7 @@ func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (q
 	}
 
 	stages := stage.NewRunner(cli, stage.RunnerOptions{
+		RunID:        spec.RunID,
 		ImageTag:     imageTag,
 		PatchdockDir: dir,
 		LogWriter:    logger,
@@ -71,7 +72,7 @@ func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (q
 		OnActivity:   rep.StageActivity,
 	})
 
-	out, err := pipeline.New(cfg, spec.Repo, stages, logger, rep).Run(ctx, spec.Task)
+	out, err := pipeline.New(cfg, spec.RunID, spec.Repo, stages, logger, rep).Run(ctx, spec.Task)
 	if err != nil {
 		return queue.Outcome{}, fmt.Errorf("%w. Check %s", err, logger.LogDir)
 	}

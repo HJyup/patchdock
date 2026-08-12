@@ -15,14 +15,14 @@ const (
 	failedOutputFile = "failed-output.json"
 )
 
+// Logger owns the audit output of one run; runID names its directory.
 type Logger struct {
-	LogID         string // still don't know whether it's the best way to indicate, but since we have logger per pipeline, it can work
 	LogDir        string
 	logStreamFile *os.File
 }
 
-func New(id string, dir string) (*Logger, error) {
-	logDir := filepath.Join(dir, "logs", id)
+func New(runID string, dir string) (*Logger, error) {
+	logDir := filepath.Join(dir, "logs", runID)
 
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed creating log directory: %w", err)
@@ -35,8 +35,7 @@ func New(id string, dir string) (*Logger, error) {
 	}
 
 	return &Logger{
-		LogDir:        filepath.Join(dir, "logs", id),
-		LogID:         id,
+		LogDir:        logDir,
 		logStreamFile: file,
 	}, nil
 }

@@ -23,8 +23,9 @@ type AgentSpec struct {
 	Limits    Limits
 }
 
-// RunnerOptions holds what every stage in one task run shares
+// RunnerOptions holds what every stage in one run shares
 type RunnerOptions struct {
+	RunID        string
 	ImageTag     string
 	PatchdockDir string
 	LogWriter    io.Writer
@@ -50,12 +51,11 @@ func NewRunner(containers ContainerRunner, options RunnerOptions) *Runner {
 }
 
 // Used by other stages to ge the output
-func decodeOutput[T any](raw []byte, stamp func(*T), build func(T) (T, error)) (T, error) {
+func decodeOutput[T any](raw []byte, build func(T) (T, error)) (T, error) {
 	var zero, decoded T
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return zero, ErrOutput{Reason: reasonNotJSON, Err: err, Raw: raw}
 	}
-	stamp(&decoded)
 
 	out, err := build(decoded)
 	if err != nil {

@@ -4,7 +4,6 @@ const executionStatusSchema = z.enum(["success", "partial_success", "failed"]);
 const reviewDecisionSchema = z.enum(["accept", "reject"]);
 
 const taskSchema = z.object({
-  id: z.string().min(1),
   title: z.string().optional(),
   description: z.string().min(1),
   labels: z.array(z.string()).optional(),
@@ -16,20 +15,12 @@ export const planDataSchema = z.object({
 });
 
 const planSchema = planDataSchema.extend({
-  id: z.string().min(1),
-  task_id: z.string().min(1),
   created_at: z.string(),
 });
 
 export const executionResultDataSchema = z.object({
   status: executionStatusSchema,
   notes: z.string().optional(),
-});
-
-const executionResultSchema = executionResultDataSchema.extend({
-  id: z.string().min(1),
-  task_id: z.string().min(1),
-  plan_id: z.string().min(1),
 });
 
 const reviewFields = z.object({
@@ -43,26 +34,22 @@ export const reviewDataSchema = reviewFields.refine(
   { message: "feedback is required when decision is reject", path: ["feedback"] },
 );
 
-const reviewSchema = reviewFields.extend({
-  id: z.string().min(1),
-  task_id: z.string().min(1),
-  execution_id: z.string().min(1),
-});
-
 export const plannerInputSchema = z.object({
   task: taskSchema,
 });
 
+// History arrays are ordered oldest attempt first: index 0 is attempt 1, and
+// the last entry is the attempt that just ran.
 export const executorInputSchema = z.object({
   plan: planSchema,
-  reviews: z.array(reviewSchema),
+  reviews: z.array(reviewFields),
 });
 
 export const reviewerInputSchema = z.object({
   plan: planSchema,
   patch: z.string(),
-  execution_results: z.array(executionResultSchema),
-  previous_reviews: z.array(reviewSchema),
+  execution_results: z.array(executionResultDataSchema),
+  previous_reviews: z.array(reviewFields),
 });
 
 export type PlanData = z.infer<typeof planDataSchema>;

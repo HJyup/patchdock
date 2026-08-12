@@ -14,6 +14,7 @@ import (
 
 type Pipeline struct {
 	cfg      config.Config
+	runID    string
 	repoDir  string
 	runner   *stage.Runner
 	logger   *auditlog.Logger
@@ -26,9 +27,10 @@ type Outcome struct {
 	Patch    auditlog.PatchStat
 }
 
-func New(cfg config.Config, repoDir string, runner *stage.Runner, logger *auditlog.Logger, reporter Reporter) *Pipeline {
+func New(cfg config.Config, runID, repoDir string, runner *stage.Runner, logger *auditlog.Logger, reporter Reporter) *Pipeline {
 	return &Pipeline{
 		cfg:      cfg,
+		runID:    runID,
 		repoDir:  repoDir,
 		reporter: reporter,
 		runner:   runner,
@@ -46,7 +48,7 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	out = &Outcome{}
 	history := newHistory()
 
-	audit := newAuditRun(p.logger, task)
+	audit := newAuditRun(p.logger, p.runID, task)
 	defer func() { audit.Finish(history, out, err) }()
 
 	p.reporter.StageChange(types.StagePlanner, 0)
@@ -132,8 +134,8 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 		return out, nil
 	}
 
-	branch := p.branchName(task)
-	if err := wks.Publish(ctx, branch, commitMessage(task, plan)); err != nil {
+	branch := p.branchName()
+	if err := wks.Publish(ctx, branch, p.commitMessage(task, plan)); err != nil {
 		audit.Failed(types.StageReviewer, err)
 		return out, fmt.Errorf("publish %s: %w", branch, err)
 	}
@@ -143,22 +145,22 @@ func (p *Pipeline) Run(ctx context.Context, task types.Task) (out *Outcome, err 
 	return out, nil
 }
 
-func (p *Pipeline) branchName(task types.Task) string {
+func (p *Pipeline) branchName() string {
 	prefix := p.cfg.Git.BranchPrefix
 	if prefix == "" {
-		return task.ID
+		return p.runID
 	}
 
-	return prefix + "/" + task.ID
+	return prefix + "/" + p.runID
 }
 
-func commitMessage(task types.Task, plan types.Plan) string {
+func (p *Pipeline) commitMessage(task types.Task, plan types.Plan) string {
 	summary := utils.FirstLine(task.Description)
 	if plan.Summary != "" {
 		summary = utils.FirstLine(plan.Summary)
 	}
 
-	return fmt.Sprintf("%s\n\nPatchdock task %s", summary, task.ID)
+	return fmt.Sprintf("%s\n\nPatchdock run %s", summary, p.runID)
 }
 
 func (p *Pipeline) agentSpec(agentFile string) stage.AgentSpec {

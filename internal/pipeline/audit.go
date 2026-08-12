@@ -18,11 +18,11 @@ type auditRun struct {
 	rawKept bool
 }
 
-func newAuditRun(logger *auditlog.Logger, task types.Task) *auditRun {
+func newAuditRun(logger *auditlog.Logger, runID string, task types.Task) *auditRun {
 	return &auditRun{
 		logger: logger,
 		rec: auditlog.Record{
-			RunID:     logger.LogID,
+			RunID:     runID,
 			Task:      task,
 			StartedAt: time.Now(),
 		},

@@ -28,7 +28,7 @@ export default definePlanner({
     return {
       summary: `Mock plan: ${title}`,
       body: [
-        `Mock plan for task ${ctx.taskId}.`,
+        `Mock plan for run ${ctx.runId}.`,
         "",
         `Request: ${title}`,
         "",

@@ -198,7 +198,7 @@ repository but cannot change it; the executor may only change the disposable
 workspace clone; the reviewer can inspect the changed workspace but not
 tamper with it. Mount targets are checked for collisions, and credential
 environment variables may not shadow the reserved `PATCHDOCK_*` variables
-the runtime injects (stage name, task ID, agent file, token budget, attempt
+the runtime injects (stage name, run ID, agent file, token budget, attempt
 counters).
 
 ### Audit log

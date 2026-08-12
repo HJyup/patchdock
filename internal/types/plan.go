@@ -2,15 +2,11 @@ package types
 
 import (
 	"time"
-
-	"github.com/HJyup/patchdock/internal/utils"
 )
 
 // Plan is the planner stage's output: an immutable description of the work
-// the executor should attempt for a single task.
+// the executor should attempt for a single run.
 type Plan struct {
-	ID        string    `json:"id"`         // runtime-filled
-	TaskID    string    `json:"task_id"`    // runtime-filled
 	CreatedAt time.Time `json:"created_at"` // runtime-filled
 
 	// Summary is the planner's 1-2 sentence account of the strategy,
@@ -23,9 +19,6 @@ type Plan struct {
 }
 
 func NewPlan(p Plan) (Plan, error) {
-	if p.ID == "" {
-		p.ID = utils.NewID("plan")
-	}
 	if p.CreatedAt.IsZero() {
 		p.CreatedAt = time.Now().UTC()
 	}
@@ -37,8 +30,6 @@ func NewPlan(p Plan) (Plan, error) {
 
 func (p *Plan) validate() error {
 	var e errs
-	e.required("plan.id", p.ID)
-	e.required("plan.task_id", p.TaskID)
 	if p.CreatedAt.IsZero() {
 		e.addf("plan.created_at: empty")
 	}

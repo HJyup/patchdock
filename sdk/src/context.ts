@@ -24,7 +24,7 @@ type Nullable<T> = T | null;
 
 interface StageContextData {
   stage: Stage;
-  taskId: string;
+  runId: string;
   paths: MountPaths;
   tokenBudget: Nullable<number>;
   attempt: number;

@@ -161,7 +161,6 @@ func (q *Queue) add(e addEvent) {
 		task: e.task,
 		state: &api.Run{
 			ID:       id,
-			TaskID:   e.task.ID,
 			Repo:     e.repo,
 			Title:    utils.FirstLine(e.task.Description),
 			Status:   api.StatusQueued,

@@ -36,7 +36,6 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 
 	raw, err := r.runStage(ctx, req.Agent, runOptions{
 		stage:       types.StageReviewer,
-		taskID:      req.Input.Plan.TaskID,
 		dir:         req.ExchangeDir,
 		mounts:      mounts,
 		attempt:     req.Attempt.Number,
@@ -46,8 +45,5 @@ func (r *Runner) RunReviewer(ctx context.Context, req ReviewerRequest) (types.Re
 		return types.Review{}, err
 	}
 
-	return decodeOutput(raw, func(r *types.Review) {
-		r.TaskID = req.Input.Plan.TaskID
-		r.ExecutionID = req.Input.ExecutionResults[len(req.Input.ExecutionResults)-1].ID
-	}, types.NewReview)
+	return decodeOutput(raw, types.NewReview)
 }

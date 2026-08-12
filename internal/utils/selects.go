@@ -1,11 +1,7 @@
 package utils
 
 // SendLatest replaces whatever is buffered in ch with v and reports whether v
-// was delivered. It never blocks.
-//
-// ch should have capacity 1: at larger capacities this drops the oldest
-// buffered value rather than replacing the newest, so a reader still sees stale
-// values before it reaches v.
+// was delivered. It never blocks (should use capacity of one for channels)
 func SendLatest[T any](ch chan T, v T) bool {
 	select {
 	case <-ch:

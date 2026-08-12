@@ -7,13 +7,9 @@ import (
 	"time"
 
 	"github.com/HJyup/patchdock/internal/daemon/api"
+	"github.com/HJyup/patchdock/internal/daemon/config"
 	"github.com/HJyup/patchdock/internal/types"
 	"github.com/HJyup/patchdock/internal/utils"
-)
-
-const (
-	publishInterval = 200 * time.Millisecond
-	inboxSize       = 256
 )
 
 var (
@@ -21,12 +17,6 @@ var (
 	ErrFinished = errors.New("run has already finished")
 	ErrRepoPath = errors.New("repo must be an absolute path")
 )
-
-type Config struct {
-	Runner        Runner
-	Retention     time.Duration
-	MaxContainers int
-}
 
 type run struct {
 	state *api.Run
@@ -43,30 +33,33 @@ type Queue struct {
 	snaps  chan api.Snapshot
 	runner Runner
 
-	// defines retention policy for finilised runs
+	// Config for making queue work
 	retention     time.Duration
 	maxContainers int
+	snapshotTick  time.Duration
 	ctx           context.Context
 
-	runs map[string]*run
-	// define all nesseary context cancel function so it's easy to cancel certain runs
+	// State information
+	runs    map[string]*run
 	cancels map[string]context.CancelFunc
+	dirty   bool
 
-	// cloning runs are the most expensive operation in the Queue. Dirty will guard of cloning up-to-date data
-	dirty bool
-
-	// scheduler implementation arrays
-	waiting []queuedTasks
+	// Scheduling
+	waiting []struct {
+		ctx   context.Context
+		runID string
+	}
 }
 
-func New(ctx context.Context, cfg Config) *Queue {
+func New(ctx context.Context, runner Runner, cfg *config.Config) *Queue {
 	return &Queue{
-		inbox:         make(chan event, inboxSize),
+		inbox:         make(chan event, cfg.InboxSize),
 		snaps:         make(chan api.Snapshot, 1),
-		runner:        cfg.Runner,
+		runner:        runner,
 		maxContainers: cfg.MaxContainers,
+		snapshotTick:  cfg.SnapshotTick.Duration(),
 
-		retention: cfg.Retention,
+		retention: cfg.Retention.Duration(),
 		ctx:       ctx,
 		runs:      make(map[string]*run),
 		cancels:   make(map[string]context.CancelFunc),
@@ -74,7 +67,7 @@ func New(ctx context.Context, cfg Config) *Queue {
 }
 
 func (q *Queue) Run() {
-	ticker := time.NewTicker(publishInterval)
+	ticker := time.NewTicker(q.snapshotTick)
 	defer ticker.Stop()
 	defer close(q.snaps)
 

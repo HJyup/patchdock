@@ -242,11 +242,6 @@ func (q *Queue) cancel(e cancelEvent) {
 		cancel()
 	}
 
-	// A run that never started has no pipeline to notice the cancelled context
-	// and report back, so retire it here. Waiting for the scheduler to do it is
-	// not enough: that only happens when a container slot is free, so on a busy
-	// queue the run would sit as queued until one opened up. Its ticket stays in
-	// queuedRuns and is skipped at admission by the finalised check.
 	if r.state.StartedAt == nil {
 		q.done(doneEvent{runID: e.runID, cancelled: true})
 	}

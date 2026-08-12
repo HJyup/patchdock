@@ -65,7 +65,7 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) error {
 	defer cli.Close()
 
 	q := queue.New(ctx, pipelineRunner(cli), cfg)
-	ch := q.Snaps()
+	ch := q.Snapshots()
 
 	b := broker.New(ch)
 

@@ -18,18 +18,16 @@ type reporter struct {
 }
 
 func (r *reporter) StageChange(stage types.StageName, attempt int) {
-	event := stageEvent{
+	r.queue.send(r.queue.ctx, stageEvent{
 		runID:   r.runID,
 		stage:   stage,
 		attempt: attempt,
-	}
-
-	select {
-	case r.queue.inbox <- event:
-	case <-r.queue.ctx.Done():
-	}
+	})
 }
 
+// StageActivity deliberately does not use send: activity text is best-effort
+// telemetry for the dashboard, so a full inbox drops it rather than making the
+// pipeline wait on the queue loop.
 func (r *reporter) StageActivity(activity string) {
 	select {
 	case r.queue.inbox <- activityEvent{runID: r.runID, text: activity}:
@@ -43,8 +41,5 @@ func (r *reporter) StageSummary(summary string) {
 		return
 	}
 
-	select {
-	case r.queue.inbox <- summaryEvent{runID: r.runID, text: summary}:
-	case <-r.queue.ctx.Done():
-	}
+	r.queue.send(r.queue.ctx, summaryEvent{runID: r.runID, text: summary})
 }

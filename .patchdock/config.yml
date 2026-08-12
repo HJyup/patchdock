@@ -31,7 +31,11 @@ credentials:
       CODEX_HOME: /codex-auth
 
 # Which filepath drives each stage.
+#
+# Currently pointed at the mock agents in mock/, which sleep and return canned
+# output instead of calling a model. Swap back to planner.ts / executor.ts /
+# reviewer.ts to use Codex again.
 stages:
-  planner: planner.ts
-  executor: executor.ts
-  reviewer: reviewer.ts
+  planner: mock/planner.ts
+  executor: mock/executor.ts
+  reviewer: mock/reviewer.ts

@@ -33,6 +33,11 @@ type run struct {
 	task  types.Task
 }
 
+type queuedTasks struct {
+	ctx   context.Context
+	specs RunSpec
+}
+
 type Queue struct {
 	inbox  chan event
 	snaps  chan api.Snapshot
@@ -49,6 +54,9 @@ type Queue struct {
 
 	// cloning runs are the most expensive operation in the Queue. Dirty will guard of cloning up-to-date data
 	dirty bool
+
+	// scheduler implementation arrays
+	waiting []queuedTasks
 }
 
 func New(ctx context.Context, cfg Config) *Queue {
@@ -83,6 +91,7 @@ func (q *Queue) Run() {
 			q.evict()
 
 			if q.dirty {
+				q.schedule()
 				q.publish()
 				q.dirty = false
 			}
@@ -163,22 +172,16 @@ func (q *Queue) add(e addEvent) {
 	q.runs[id] = r
 	q.dirty = true
 
-	// TODO: This is where the scheduler will come into place
-	// Right now it's sequential
-
 	e.res <- id
 	q.cancels[r.state.ID] = cancel
 
-	now := time.Now()
-	r.state.Status = api.StatusStarted
-	r.state.StartedAt = &now
-	q.dirty = true
-
-	go q.execute(ctx, RunSpec{
-		RunID: r.state.ID,
-		Repo:  r.state.Repo,
-		Task:  r.task,
-	})
+	q.waiting = append(q.waiting, queuedTasks{
+		ctx: ctx,
+		specs: RunSpec{
+			RunID: r.state.ID,
+			Repo:  r.state.Repo,
+			Task:  r.task,
+		}})
 }
 
 func (q *Queue) cancel(e cancelEvent) {
@@ -216,6 +219,18 @@ func (q *Queue) stage(e stageEvent) {
 
 	r.state.Activity = ""
 	q.dirty = true
+}
+
+func (q *Queue) active() int {
+	n := 0
+
+	for _, r := range q.runs {
+		if r.state.StartedAt != nil && !api.IsFinilised(r.state.Status) {
+			n++
+		}
+	}
+
+	return n
 }
 
 func (q *Queue) activity(e activityEvent) {
@@ -275,6 +290,29 @@ func (q *Queue) done(e doneEvent) {
 	}
 
 	q.dirty = true
+}
+
+func (q *Queue) schedule() {
+	if q.dirty && q.active() < q.maxContainers && len(q.waiting) > 0 {
+		task := q.waiting[0]
+		q.waiting = q.waiting[1:]
+
+		r, ok := q.runs[task.specs.RunID]
+		if !ok || api.IsFinilised(r.state.Status) {
+			return
+		}
+
+		now := time.Now()
+		r.state.Status = api.StatusStarted
+		r.state.StartedAt = &now
+		q.dirty = true
+
+		go q.execute(task.ctx, RunSpec{
+			RunID: r.state.ID,
+			Repo:  r.state.Repo,
+			Task:  r.task,
+		})
+	}
 }
 
 func (q *Queue) execute(ctx context.Context, spec RunSpec) {

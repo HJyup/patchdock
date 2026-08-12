@@ -20,10 +20,7 @@ const (
 	exitNoDaemon = 3
 )
 
-var (
-	rootDetach bool
-	rootRepo   string
-)
+var rootRepo string
 
 var rootCmd = &cobra.Command{
 	Use:          "dock [prompt]",
@@ -42,16 +39,12 @@ var rootCmd = &cobra.Command{
 		if len(args) == 1 {
 			return submitDetached(ctx, rootRepo, args[0])
 		}
-		if rootDetach {
-			return errors.New(`--detach needs an inline prompt: dock -d "…"`)
-		}
 
 		return openApp(ctx, rootRepo, false)
 	},
 }
 
 func init() {
-	rootCmd.Flags().BoolVarP(&rootDetach, "detach", "d", false, "queue the inline prompt and print its run id")
 	rootCmd.Flags().StringVar(&rootRepo, "repo", "", "target a repo other than the current directory")
 }
 

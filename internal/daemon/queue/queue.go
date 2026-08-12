@@ -223,7 +223,6 @@ func (q *Queue) stage(e stageEvent) {
 
 func (q *Queue) active() int {
 	n := 0
-
 	for _, r := range q.runs {
 		if r.state.StartedAt != nil && !api.IsFinilised(r.state.Status) {
 			n++

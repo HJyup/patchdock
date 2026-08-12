@@ -181,6 +181,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	if err != nil {
 		return DeamonError(err)
 	}
+	defer resp.Body.Close()
 
 	if err := checkStatus(resp); err != nil {
 		return err

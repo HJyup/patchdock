@@ -119,7 +119,7 @@ container:
   token_budget: 100000
 
 retries:
-  max: 2
+  max: 3
 ```
 
 The container timeout is a hard wall-clock limit for each stage. The token
@@ -177,17 +177,17 @@ Opens the terminal interface directly on the live dashboard.
 ### Submit a detached task
 
 ```console
-dock -d "Update the API error handling"
+dock "Update the API error handling"
 run-4e6b30262e44
 ```
 
-Queues the task, starts the daemon on demand if necessary, prints the run ID,
-and exits without opening the terminal interface.
+Passing an inline prompt queues the task, starts the daemon on demand if
+necessary, prints the run ID, and exits without opening the terminal interface.
 
 Use `--repo` to target another repository:
 
 ```bash
-dock --repo ../another-project -d "Add request validation"
+dock --repo ../another-project "Add request validation"
 ```
 
 ### Control the daemon

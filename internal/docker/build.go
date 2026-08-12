@@ -14,9 +14,6 @@ import (
 type buildOutput struct {
 	Stream string `json:"stream"`
 	Error  string `json:"error"`
-	Aux    struct {
-		ID string `json:"ID"`
-	} `json:"aux"`
 }
 
 // build closes both channels when the build completes, whether it succeeded or not.
@@ -56,7 +53,6 @@ func build(ctx context.Context, cli *client.Client, spec BuildSpec) (<-chan LogL
 }
 
 func streamBuildLogs(body io.Reader, logs chan LogLine, result chan BuildResult) {
-	var imageID string
 	decoder := json.NewDecoder(body)
 
 	for {
@@ -77,14 +73,10 @@ func streamBuildLogs(body io.Reader, logs chan LogLine, result chan BuildResult)
 			return
 		}
 
-		if out.Aux.ID != "" {
-			imageID = out.Aux.ID
-		}
-
 		if out.Stream != "" {
 			logs <- LogLine{Text: out.Stream}
 		}
 	}
 
-	result <- BuildResult{ImageID: imageID}
+	result <- BuildResult{}
 }

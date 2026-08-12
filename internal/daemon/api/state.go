@@ -51,7 +51,6 @@ func StatusForStage(stage types.StageName) Status {
 // Run is the daemon's record of one queued or running task
 type Run struct {
 	ID       string `json:"id"`
-	TaskID   string `json:"task_id"`
 	Repo     string `json:"repo"`
 	Title    string `json:"title"`
 	Status   Status `json:"status"`

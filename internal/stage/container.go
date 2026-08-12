@@ -47,7 +47,7 @@ func (r *Runner) containerSpec(op runOptions, agent AgentSpec) (docker.RunSpec, 
 		Image:   r.options.ImageTag,
 		Mounts:  mounts,
 		Env:     env,
-		Labels:  map[string]string{"patchdock.task-id": op.taskID},
+		Labels:  map[string]string{"patchdock.run-id": r.options.RunID},
 		Timeout: agent.Limits.Timeout,
 	}, nil
 }
@@ -74,8 +74,8 @@ func (r *Runner) containerMounts(op runOptions) ([]docker.Mount, error) {
 
 func (r *Runner) containerEnv(op runOptions, agent AgentSpec) (map[string]string, error) {
 	env := map[string]string{
-		"PATCHDOCK_STAGE":   string(op.stage),
-		"PATCHDOCK_TASK_ID": op.taskID,
+		"PATCHDOCK_STAGE":  string(op.stage),
+		"PATCHDOCK_RUN_ID": r.options.RunID,
 	}
 	if agent.AgentFile != "" {
 		env["PATCHDOCK_AGENT_FILE"] = agent.AgentFile

@@ -28,7 +28,6 @@ func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.Ex
 
 	raw, err := r.runStage(ctx, req.Agent, runOptions{
 		stage:       types.StageExecutor,
-		taskID:      req.Input.Plan.TaskID,
 		dir:         req.ExchangeDir,
 		mounts:      mounts,
 		attempt:     req.Attempt.Number,
@@ -38,8 +37,5 @@ func (r *Runner) RunExecutor(ctx context.Context, req ExecutorRequest) (types.Ex
 		return types.ExecutionResult{}, err
 	}
 
-	return decodeOutput(raw, func(er *types.ExecutionResult) {
-		er.TaskID = req.Input.Plan.TaskID
-		er.PlanID = req.Input.Plan.ID
-	}, types.NewExecutionResult)
+	return decodeOutput(raw, types.NewExecutionResult)
 }

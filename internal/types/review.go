@@ -1,14 +1,7 @@
 package types
 
-import "github.com/HJyup/patchdock/internal/utils"
-
-// Review is the reviewer stage's output for one ExecutionResult.
 // Decision is the one agent-authored field the runtime branches on
 type Review struct {
-	ID          string `json:"id"`           // runtime-filled
-	TaskID      string `json:"task_id"`      // runtime-filled
-	ExecutionID string `json:"execution_id"` // runtime-filled
-
 	Decision ReviewDecision `json:"decision"`
 
 	// Summary is the reviewer's 1-2 sentence verdict, surfaced in run results.
@@ -32,9 +25,6 @@ const (
 )
 
 func NewReview(r Review) (Review, error) {
-	if r.ID == "" {
-		r.ID = utils.NewID("review")
-	}
 	if err := r.validate(); err != nil {
 		return Review{}, err
 	}
@@ -43,9 +33,6 @@ func NewReview(r Review) (Review, error) {
 
 func (r *Review) validate() error {
 	var e errs
-	e.required("review.id", r.ID)
-	e.required("review.task_id", r.TaskID)
-	e.required("review.execution_id", r.ExecutionID)
 	switch r.Decision {
 	case ReviewAccept, ReviewReject:
 	case "":

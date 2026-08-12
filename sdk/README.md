@@ -61,7 +61,9 @@ interface PlanData {
 type PlannerRun = (ctx: StageContext, input: PlannerInput) => Promise<PlanData>;
 ```
 
-Patchdock adds the plan ID, task ID, and creation timestamp after the planner returns.
+Patchdock adds the creation timestamp after the planner returns. Nothing in the
+contracts carries an ID: the run ID (`ctx.runId`) and the attempt number address
+every stage output, so agents never mint or echo identifiers.
 
 Structure inside `body` (approach, ordered steps, acceptance criteria) is a prompt
 convention for the executor and reviewer to read, not a schema. Keep the conventional
@@ -136,9 +138,6 @@ interface ReviewData {
 
 type ReviewerRun = (ctx: StageContext, input: ReviewerInput) => Promise<ReviewData>;
 ```
-
-Patchdock adds the review ID, task ID, and latest execution ID after the reviewer
-returns.
 
 On reject, `feedback` becomes the executor's context for the next attempt. By
 convention, list each issue with a severity and file:line reference so the retry knows
@@ -226,7 +225,7 @@ write typed input
     -> validate input
     -> call run(ctx, input)
     -> validate output
-    -> enrich runtime-owned fields
+    -> stamp the plan's creation timestamp
     -> pass result to the next stage
 ```
 
@@ -239,7 +238,7 @@ type Stage = "planner" | "executor" | "reviewer";
 
 interface StageContext {
   stage: Stage;
-  taskId: string;
+  runId: string;
   paths: {
     repo?: string;
     workspace?: string;
@@ -260,7 +259,8 @@ interface StageLogEvent {
 ```
 
 - `stage` identifies which definition is running.
-- `taskId` identifies the current Patchdock task.
+- `runId` identifies the current run. It is the only identity Patchdock assigns, and it
+  names the run's audit log directory, published branch, and stage containers.
 - `paths` contains the conventional mount locations available to the stage.
 - `tokenBudget` contains the configured budget or `null` when unlimited.
 - `attempt` and `maxAttempts` let retry-aware agents adapt their behaviour.
@@ -269,7 +269,7 @@ interface StageLogEvent {
 Use `ctx.log` for progress and diagnostic information:
 
 ```typescript
-ctx.log(`Running ${ctx.stage} for task ${ctx.taskId}`);
+ctx.log(`Running ${ctx.stage} for run ${ctx.runId}`);
 
 ctx.log({
   source: "my-agent",
@@ -321,8 +321,8 @@ Contracts are checked at two boundaries:
 
 1. The TypeScript SDK validates input before the agent runs and validates its returned
    output afterward.
-2. The Go host enriches the result with runtime-owned fields and validates the complete
-   domain contract again.
+2. The Go host validates the same domain contract again before the result reaches the
+   next stage or the audit record.
 
 Validation failures stop the stage. Invalid data is never passed to the next agent.
 
@@ -330,12 +330,13 @@ The main rules agent authors need to respect are:
 
 - Default-export one definition matching the configured stage.
 - Return the output type belonging to that definition.
-- Use snake-case JSON field names such as `task_id` and `execution_results`.
+- Use snake-case JSON field names such as `execution_results` and `previous_reviews`.
 - Planner output requires a non-empty `summary` and `body`.
 - Executor `status` must be `success`, `partial_success`, or `failed`.
 - Reviewer `decision` must be `accept` or `reject`; a rejected review must carry
   non-empty `feedback` (accepted reviews may include it for non-blocking notes).
-- Do not return runtime-owned IDs, timestamps, stage relationships, or the executor patch.
+- Do not return identifiers, timestamps, or the executor patch. The run ID and the
+  attempt number are the runtime's to assign, and both already reach you on `ctx`.
 - Write executor file changes only into the writable workspace.
 
 ## Development checks

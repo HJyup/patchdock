@@ -22,7 +22,7 @@ container:
 # pass, so this multiplies what a run costs. Must be at least 1 — 0 runs nothing
 # and the run is reported as rejected.
 retries:
-  max: 2
+  max: 3
 
 # Host files mounted read-only into every stage container, so the agent can
 # authenticate

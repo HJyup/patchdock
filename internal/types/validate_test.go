@@ -4,7 +4,6 @@ import "testing"
 
 func validPlan() Plan {
 	return Plan{
-		TaskID:  "task-1",
 		Summary: "fix the bug in one file",
 		Body:    "## Approach\nEdit the file.\n\n## Acceptance criteria\n- tests pass",
 	}
@@ -28,20 +27,16 @@ func TestPlanRequiresSummaryAndBody(t *testing.T) {
 
 func TestReviewRejectRequiresFeedback(t *testing.T) {
 	_, err := NewReview(Review{
-		TaskID:      "task-1",
-		ExecutionID: "exec-1",
-		Decision:    ReviewReject,
-		Summary:     "does not compile",
+		Decision: ReviewReject,
+		Summary:  "does not compile",
 	})
 	assertError(t, err, "review.feedback: required when decision is reject")
 }
 
 func TestReviewAcceptAllowsOptionalFeedback(t *testing.T) {
 	base := Review{
-		TaskID:      "task-1",
-		ExecutionID: "exec-1",
-		Decision:    ReviewAccept,
-		Summary:     "looks good",
+		Decision: ReviewAccept,
+		Summary:  "looks good",
 	}
 
 	if _, err := NewReview(base); err != nil {
@@ -56,18 +51,14 @@ func TestReviewAcceptAllowsOptionalFeedback(t *testing.T) {
 
 func TestReviewInvalidDecision(t *testing.T) {
 	_, err := NewReview(Review{
-		TaskID:      "task-1",
-		ExecutionID: "exec-1",
-		Decision:    "maybe",
-		Summary:     "hmm",
+		Decision: "maybe",
+		Summary:  "hmm",
 	})
 	assertError(t, err, `review.decision: invalid value "maybe"`)
 }
 
 func TestExecutionResultInvalidStatus(t *testing.T) {
 	_, err := NewExecutionResult(ExecutionResult{
-		TaskID: "task-1",
-		PlanID: "plan-1",
 		Status: "weird",
 	})
 	assertError(t, err, `execution_result.status: invalid value "weird"`)
@@ -75,9 +66,7 @@ func TestExecutionResultInvalidStatus(t *testing.T) {
 
 func TestReviewJoinsMultipleErrorsInFieldOrder(t *testing.T) {
 	_, err := NewReview(Review{})
-	assertError(t, err, "review.task_id: empty\n"+
-		"review.execution_id: empty\n"+
-		"review.decision: empty\n"+
+	assertError(t, err, "review.decision: empty\n"+
 		"review.summary: empty")
 }
 

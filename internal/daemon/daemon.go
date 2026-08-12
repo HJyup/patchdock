@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/HJyup/patchdock/internal/daemon/broker"
+	"github.com/HJyup/patchdock/internal/daemon/config"
 	"github.com/HJyup/patchdock/internal/daemon/queue"
+	"github.com/HJyup/patchdock/internal/docker"
 	"github.com/HJyup/patchdock/internal/lock"
 	"github.com/HJyup/patchdock/internal/runtimedir"
 	"github.com/HJyup/patchdock/internal/transport"
@@ -49,7 +51,20 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) error {
 	}
 	defer listener.Close()
 
-	q := queue.New(ctx, queue.Config{Runner: runPipeline, Retention: 15 * time.Minute})
+	cfg, err := config.Load(dir.Config())
+	if err != nil {
+		return err
+	}
+
+	// Constructing the client does not dial the daemon — connectivity failures
+	// still surface per run, where they name the stage that hit them.
+	cli, err := docker.NewClient()
+	if err != nil {
+		return fmt.Errorf("connect to docker: %w", err)
+	}
+	defer cli.Close()
+
+	q := queue.New(ctx, queue.Config{Runner: pipelineRunner(cli), Retention: cfg.Retention.Duration(), MaxContainers: cfg.MaxContainers})
 	ch := q.Snaps()
 
 	b := broker.New(ch)

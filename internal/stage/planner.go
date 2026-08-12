@@ -26,7 +26,6 @@ func (r *Runner) RunPlanner(ctx context.Context, req PlannerRequest) (types.Plan
 
 	raw, err := r.runStage(ctx, req.Agent, runOptions{
 		stage:  types.StagePlanner,
-		taskID: req.Input.Task.ID,
 		dir:    req.ExchangeDir,
 		mounts: mounts,
 	}, req.Input)
@@ -34,5 +33,5 @@ func (r *Runner) RunPlanner(ctx context.Context, req PlannerRequest) (types.Plan
 		return types.Plan{}, err
 	}
 
-	return decodeOutput(raw, func(p *types.Plan) { p.TaskID = req.Input.Task.ID }, types.NewPlan)
+	return decodeOutput(raw, types.NewPlan)
 }

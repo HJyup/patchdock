@@ -23,13 +23,19 @@ var (
 )
 
 type Config struct {
-	Runner    Runner
-	Retention time.Duration
+	Runner        Runner
+	Retention     time.Duration
+	MaxContainers int
 }
 
 type run struct {
 	state *api.Run
 	task  types.Task
+}
+
+type queuedTasks struct {
+	ctx   context.Context
+	runID string
 }
 
 type Queue struct {
@@ -38,8 +44,9 @@ type Queue struct {
 	runner Runner
 
 	// defines retention policy for finilised runs
-	retention time.Duration
-	ctx       context.Context
+	retention     time.Duration
+	maxContainers int
+	ctx           context.Context
 
 	runs map[string]*run
 	// define all nesseary context cancel function so it's easy to cancel certain runs
@@ -47,13 +54,17 @@ type Queue struct {
 
 	// cloning runs are the most expensive operation in the Queue. Dirty will guard of cloning up-to-date data
 	dirty bool
+
+	// scheduler implementation arrays
+	waiting []queuedTasks
 }
 
 func New(ctx context.Context, cfg Config) *Queue {
 	return &Queue{
-		inbox:  make(chan event, inboxSize),
-		snaps:  make(chan api.Snapshot, 1),
-		runner: cfg.Runner,
+		inbox:         make(chan event, inboxSize),
+		snaps:         make(chan api.Snapshot, 1),
+		runner:        cfg.Runner,
+		maxContainers: cfg.MaxContainers,
 
 		retention: cfg.Retention,
 		ctx:       ctx,
@@ -78,6 +89,7 @@ func (q *Queue) Run() {
 
 		case <-ticker.C:
 			q.evict()
+			q.schedule()
 
 			if q.dirty {
 				q.publish()
@@ -149,7 +161,6 @@ func (q *Queue) add(e addEvent) {
 		task: e.task,
 		state: &api.Run{
 			ID:       id,
-			TaskID:   e.task.ID,
 			Repo:     e.repo,
 			Title:    utils.FirstLine(e.task.Description),
 			Status:   api.StatusQueued,
@@ -160,22 +171,10 @@ func (q *Queue) add(e addEvent) {
 	q.runs[id] = r
 	q.dirty = true
 
-	// TODO: This is where the scheduler will come into place
-	// Right now it's sequential
-
 	e.res <- id
 	q.cancels[r.state.ID] = cancel
 
-	now := time.Now()
-	r.state.Status = api.StatusStarted
-	r.state.StartedAt = &now
-	q.dirty = true
-
-	go q.execute(ctx, RunSpec{
-		RunID: r.state.ID,
-		Repo:  r.state.Repo,
-		Task:  r.task,
-	})
+	q.waiting = append(q.waiting, queuedTasks{ctx: ctx, runID: id})
 }
 
 func (q *Queue) cancel(e cancelEvent) {
@@ -213,6 +212,17 @@ func (q *Queue) stage(e stageEvent) {
 
 	r.state.Activity = ""
 	q.dirty = true
+}
+
+func (q *Queue) active() int {
+	n := 0
+	for _, r := range q.runs {
+		if r.state.StartedAt != nil && !api.IsFinilised(r.state.Status) {
+			n++
+		}
+	}
+
+	return n
 }
 
 func (q *Queue) activity(e activityEvent) {
@@ -266,8 +276,40 @@ func (q *Queue) done(e doneEvent) {
 		}
 	}
 
-	delete(q.cancels, e.runID)
+	if cancel, ok := q.cancels[e.runID]; ok {
+		cancel()
+		delete(q.cancels, e.runID)
+	}
+
 	q.dirty = true
+}
+
+func (q *Queue) schedule() {
+	for len(q.waiting) > 0 && q.active() < q.maxContainers {
+		queued := q.waiting[0]
+		q.waiting = q.waiting[1:]
+
+		r, ok := q.runs[queued.runID]
+		if !ok || api.IsFinilised(r.state.Status) {
+			continue
+		}
+
+		if queued.ctx.Err() != nil {
+			q.done(doneEvent{runID: queued.runID, cancelled: true})
+			continue
+		}
+
+		now := time.Now()
+		r.state.Status = api.StatusStarted
+		r.state.StartedAt = &now
+		q.dirty = true
+
+		go q.execute(queued.ctx, RunSpec{
+			RunID: r.state.ID,
+			Repo:  r.state.Repo,
+			Task:  r.task,
+		})
+	}
 }
 
 func (q *Queue) execute(ctx context.Context, spec RunSpec) {

@@ -11,14 +11,14 @@ func renderRun(rec *Record) []byte {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "# %s · %s · %s · %s\n\n",
-		rec.Task.ID, outcomeWord(rec), utils.Plural(len(rec.Attempts), "attempt"), rec.Duration)
+		rec.RunID, outcomeWord(rec), utils.Plural(len(rec.Attempts), "attempt"), rec.Duration)
 
 	if title := strings.TrimSpace(rec.Task.Title); title != "" {
 		fmt.Fprintf(&b, "**%s**\n\n", title)
 	}
 	fmt.Fprintf(&b, "**Task:** %s\n\n", strings.TrimSpace(rec.Task.Description))
 
-	if rec.Plan.ID != "" {
+	if rec.Plan.Summary != "" {
 		b.WriteString("## Plan\n\n")
 		fmt.Fprintf(&b, "%s\n\n", strings.TrimSpace(rec.Plan.Summary))
 		if body := strings.TrimSpace(rec.Plan.Body); body != "" {

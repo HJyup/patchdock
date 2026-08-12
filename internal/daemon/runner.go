@@ -19,7 +19,13 @@ import (
 
 const patchdockDir = ".patchdock"
 
-func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (queue.Outcome, error) {
+func pipelineRunner(cli *docker.Client) queue.Runner {
+	return func(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (queue.Outcome, error) {
+		return runPipeline(ctx, cli, spec, rep)
+	}
+}
+
+func runPipeline(ctx context.Context, cli *docker.Client, spec queue.RunSpec, rep queue.Reporter) (queue.Outcome, error) {
 	dir := filepath.Join(spec.Repo, patchdockDir)
 
 	if _, err := os.Stat(dir); err != nil {
@@ -33,12 +39,6 @@ func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (q
 	if err != nil {
 		return queue.Outcome{}, err
 	}
-
-	cli, err := docker.NewClient()
-	if err != nil {
-		return queue.Outcome{}, fmt.Errorf("connect to docker: %w. Is the Docker daemon running", err)
-	}
-	defer cli.Close()
 
 	logger, err := auditlog.New(spec.RunID, dir)
 	if err != nil {
@@ -63,6 +63,7 @@ func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (q
 	}
 
 	stages := stage.NewRunner(cli, stage.RunnerOptions{
+		RunID:        spec.RunID,
 		ImageTag:     imageTag,
 		PatchdockDir: dir,
 		LogWriter:    logger,
@@ -71,7 +72,7 @@ func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (q
 		OnActivity:   rep.StageActivity,
 	})
 
-	out, err := pipeline.New(cfg, spec.Repo, stages, logger, rep).Run(ctx, spec.Task)
+	out, err := pipeline.New(cfg, spec.RunID, spec.Repo, stages, logger, rep).Run(ctx, spec.Task)
 	if err != nil {
 		return queue.Outcome{}, fmt.Errorf("%w. Check %s", err, logger.LogDir)
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/HJyup/patchdock/internal/types"
+	"github.com/HJyup/patchdock/internal/utils"
 )
 
 const namespaceError = "config.name_space: must be lowercase letters or digits, separated by '.', '_' or '-'"
@@ -156,7 +157,7 @@ func TestValidateFieldErrors(t *testing.T) {
 		},
 		{
 			name:   "negative timeout",
-			mutate: func(c *Config) { c.Container.Timeout = Duration(-1) },
+			mutate: func(c *Config) { c.Container.Timeout = utils.Duration(-1) },
 			want:   "config.container.timeout: must be >= 0",
 		},
 		{

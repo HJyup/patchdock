@@ -1,6 +1,9 @@
 package config
 
-import "github.com/HJyup/patchdock/internal/types"
+import (
+	"github.com/HJyup/patchdock/internal/types"
+	"github.com/HJyup/patchdock/internal/utils"
+)
 
 type Config struct {
 	Namespace   string                     `yaml:"name_space"`
@@ -22,8 +25,8 @@ type Credential struct {
 }
 
 type Container struct {
-	Timeout     Duration `yaml:"timeout"`
-	TokenBudget int      `yaml:"token_budget"`
+	Timeout     utils.Duration `yaml:"timeout"`
+	TokenBudget int            `yaml:"token_budget"`
 }
 
 type Retries struct {

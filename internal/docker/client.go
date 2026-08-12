@@ -17,8 +17,7 @@ type BuildSpec struct {
 }
 
 type BuildResult struct {
-	ImageID string // the daemon's content-addressed ID
-	Err     error
+	Err error
 }
 
 type Mount struct {

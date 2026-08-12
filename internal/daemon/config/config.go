@@ -7,16 +7,18 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/HJyup/patchdock/internal/utils"
 )
 
 const (
 	DefaultMaxContainers = 3
-	DefaultRetention     = Duration(15 * time.Minute)
+	DefaultRetention     = utils.Duration(15 * time.Minute)
 )
 
 type Config struct {
-	MaxContainers int      `json:"max_containers"`
-	Retention     Duration `json:"retention"`
+	MaxContainers int            `json:"max_containers"`
+	Retention     utils.Duration `json:"retention"`
 }
 
 func Defaults() Config {

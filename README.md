@@ -119,7 +119,7 @@ container:
   token_budget: 100000
 
 retries:
-  max: 2
+  max: 3
 ```
 
 The container timeout is a hard wall-clock limit for each stage. The token

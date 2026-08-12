@@ -62,10 +62,6 @@ func TestBuildTagsImage(t *testing.T) {
 	if r.Err != nil {
 		t.Fatalf("build failed: %v", r.Err)
 	}
-	if r.ImageID == "" {
-		t.Error("expected a non-empty ImageID from the aux stream")
-	}
-
 	// The point of the test: the tag must be findable on the daemon.
 	found, err := c.ImageExists(ctx, imageTag)
 	if err != nil {

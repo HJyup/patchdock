@@ -1,6 +1,6 @@
 # Patchdock
 
-Patchdock turns a prompt into a reviewed patch. Describe a task, and agents
+Turns a prompt into a reviewed patch. Describe a task, and agents
 work through it inside an isolated Docker container; the result lands as a
 commit on a `patchdock/…` branch in your repository, ready to review and merge.
 
@@ -204,7 +204,5 @@ it directly:
 
 ## References
 
-- [Architecture](./ARCHITECTURE.md): how Patchdock works in detail, covering
-  the daemon, the live state feed, and the anatomy of a pipeline run.
-- [Patchdock Agent SDK](./sdk/README.md): agent contracts, custom
-  implementations, runtime context, and configuration details.
+- [Architecture](./ARCHITECTURE.md)
+- [Patchdock Agent SDK](./sdk/README.md)

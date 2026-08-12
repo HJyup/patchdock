@@ -4,7 +4,8 @@ Turns a prompt into a reviewed patch. Describe a task, and agents
 work through it inside an isolated Docker container; the result lands as a
 commit on a `patchdock/…` branch in your repository, ready to review and merge.
 
-<img width="1501" height="644" alt="example screen" src="https://github.com/user-attachments/assets/1d36e6ea-a430-4f52-bd9d-b52570dac3a3" />
+<img width="1913" height="933" alt="Patchdock Demo Crop" src="https://github.com/user-attachments/assets/8713e39b-98f4-4046-8b56-ddfc765f1bde" />
+
 
 ## Getting started
 

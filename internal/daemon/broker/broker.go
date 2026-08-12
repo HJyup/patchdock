@@ -11,21 +11,25 @@ import (
 
 var ErrClosed = errors.New("the broker has been closed")
 
-// Defines main state where we fannin out snapshot of runs to the subscribers
+// Broker centralised places for fan-out all snapshots to clients
 type Broker struct {
+	// Core
 	mu     sync.Mutex
-	subs   map[uint64]*Subscriber
+	subs   map[uint64]*subscriber
 	snaps  <-chan api.Snapshot
+	closed bool
+
+	// Subscribers management
 	currID uint64
 
-	last   *api.Snapshot
-	closed bool
+	// State handling
+	lastSnap *api.Snapshot
 }
 
 func New(snaps <-chan api.Snapshot) *Broker {
 	return &Broker{
 		mu:    sync.Mutex{},
-		subs:  make(map[uint64]*Subscriber),
+		subs:  make(map[uint64]*subscriber),
 		snaps: snaps,
 	}
 }
@@ -49,6 +53,7 @@ func (b *Broker) Run(ctx context.Context) {
 	}
 }
 
+// Close removes all connections to the broker subsequently closing all subscribers
 func (b *Broker) Close() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -61,7 +66,8 @@ func (b *Broker) Close() {
 	clear(b.subs)
 }
 
-func (b *Broker) Follow() (*Subscriber, error) {
+// Follow creates a subscriber with unique id for the client
+func (b *Broker) Follow() (*subscriber, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -70,19 +76,20 @@ func (b *Broker) Follow() (*Subscriber, error) {
 	}
 
 	b.currID++
-	sub := &Subscriber{
+	sub := &subscriber{
 		ID:       b.currID,
 		Snapshot: make(chan api.Snapshot, 1),
 	}
 
 	b.subs[sub.ID] = sub
-	if b.last != nil {
-		sub.set(*b.last)
+	if b.lastSnap != nil {
+		sub.set(*b.lastSnap)
 	}
 
 	return sub, nil
 }
 
+// Unfollow removes subscriber for a broker
 func (b *Broker) Unfollow(id uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -107,5 +114,5 @@ func (b *Broker) fanout(snap api.Snapshot) {
 		sub.set(snap)
 	}
 
-	b.last = &snap
+	b.lastSnap = &snap
 }

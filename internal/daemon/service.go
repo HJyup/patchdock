@@ -50,12 +50,12 @@ func (s *Service) Run(ctx context.Context, repo string, prompt string) (api.RunR
 
 	task, err := types.NewTask(types.Task{Description: prompt})
 	if err != nil {
-		return api.RunResponse{}, errors.New("failed to create a task")
+		return api.RunResponse{}, fmt.Errorf("%w: %w", ErrInvalidUserPayload, err)
 	}
 
 	id, err := s.queue.Add(repo, task)
 	if err != nil {
-		return api.RunResponse{}, errors.New("failed to add task to the queue")
+		return api.RunResponse{}, fmt.Errorf("queue task: %w", err)
 	}
 
 	return api.RunResponse{RunID: id}, nil

@@ -7,78 +7,76 @@ import (
 	"time"
 
 	"github.com/HJyup/patchdock/internal/daemon/api"
+	"github.com/HJyup/patchdock/internal/daemon/config"
 	"github.com/HJyup/patchdock/internal/types"
 	"github.com/HJyup/patchdock/internal/utils"
-)
-
-const (
-	publishInterval = 200 * time.Millisecond
-	inboxSize       = 256
 )
 
 var (
 	ErrNotFound = errors.New("run not found")
 	ErrFinished = errors.New("run has already finished")
-	ErrRepoPath = errors.New("repo must be an absolute path")
 )
 
-type Config struct {
-	Runner        Runner
-	Retention     time.Duration
-	MaxContainers int
-}
-
+// run represents a live state published to watchers
 type run struct {
 	state *api.Run
 	task  types.Task
 }
 
-type queuedTasks struct {
+// queuedRun is an admission ticket for a run that has not started yet
+type queuedRun struct {
 	ctx   context.Context
 	runID string
 }
 
 type Queue struct {
+	// Core
 	inbox  chan event
 	snaps  chan api.Snapshot
 	runner Runner
 
-	// defines retention policy for finilised runs
+	// Config for making queue work
 	retention     time.Duration
 	maxContainers int
+	snapshotTick  time.Duration
 	ctx           context.Context
 
-	runs map[string]*run
-	// define all nesseary context cancel function so it's easy to cancel certain runs
+	// State information
+	runs    map[string]*run
 	cancels map[string]context.CancelFunc
+	dirty   bool
 
-	// cloning runs are the most expensive operation in the Queue. Dirty will guard of cloning up-to-date data
-	dirty bool
-
-	// scheduler implementation arrays
-	waiting []queuedTasks
+	// Scheduling
+	queuedRuns []queuedRun
 }
 
-func New(ctx context.Context, cfg Config) *Queue {
+func New(ctx context.Context, runner Runner, cfg *config.Config) *Queue {
 	return &Queue{
-		inbox:         make(chan event, inboxSize),
-		snaps:         make(chan api.Snapshot, 1),
-		runner:        cfg.Runner,
-		maxContainers: cfg.MaxContainers,
+		inbox:  make(chan event, cfg.InboxSize),
+		snaps:  make(chan api.Snapshot, 1),
+		runner: runner,
 
-		retention: cfg.Retention,
-		ctx:       ctx,
-		runs:      make(map[string]*run),
-		cancels:   make(map[string]context.CancelFunc),
+		maxContainers: cfg.MaxContainers,
+		snapshotTick:  cfg.SnapshotTick.Duration(),
+		retention:     cfg.Retention.Duration(),
+		ctx:           ctx,
+
+		runs:    make(map[string]*run),
+		cancels: make(map[string]context.CancelFunc),
+
+		queuedRuns: make([]queuedRun, 0),
 	}
 }
 
 func (q *Queue) Run() {
-	ticker := time.NewTicker(publishInterval)
+	ticker := time.NewTicker(q.snapshotTick)
 	defer ticker.Stop()
+
 	defer close(q.snaps)
 
+	// Publish empty state to the queue
 	q.publish()
+
 	for {
 		select {
 		case <-q.ctx.Done():
@@ -99,15 +97,66 @@ func (q *Queue) Run() {
 	}
 }
 
-func (q *Queue) Snaps() <-chan api.Snapshot {
+// Snapshots returns a channel as a single point of recieving updates from the queue
+func (q *Queue) Snapshots() <-chan api.Snapshot {
 	return q.snaps
 }
 
+// Core queue functions (remove, schedule, publish)
+
+func (q *Queue) evict() {
+	cutoff := time.Now().Add(-q.retention)
+
+	for id, r := range q.runs {
+		if r.state.FinishedAt != nil && r.state.FinishedAt.Before(cutoff) {
+			delete(q.runs, id)
+			q.dirty = true
+		}
+	}
+}
+
+func (q *Queue) publish() {
+	snap := q.snapshot()
+
+	utils.SendLatest(q.snaps, snap)
+}
+
+func (q *Queue) schedule() {
+	for len(q.queuedRuns) > 0 && q.activeCount() < q.maxContainers {
+		queued := q.queuedRuns[0]
+		q.queuedRuns = q.queuedRuns[1:]
+
+		r, ok := q.runs[queued.runID]
+		if !ok || api.IsFinilised(r.state.Status) {
+			continue
+		}
+
+		// Has been cannceled before (invalidate queued slice)
+		if queued.ctx.Err() != nil {
+			q.done(doneEvent{runID: queued.runID, cancelled: true})
+			continue
+		}
+
+		now := time.Now()
+		r.state.Status = api.StatusStarted
+		r.state.StartedAt = &now
+		q.dirty = true
+
+		go q.execute(queued.ctx, RunSpec{
+			RunID: r.state.ID,
+			Repo:  r.state.Repo,
+			Task:  r.task,
+		})
+	}
+}
+
+// Tasks public methods
+
+// Add queues one task and blocks until the queue assigns it a run ID
 func (q *Queue) Add(repo string, task types.Task) (string, error) {
 	res := make(chan string, 1)
-	select {
-	case q.inbox <- addEvent{repo: filepath.Clean(repo), task: task, res: res}:
-	case <-q.ctx.Done():
+
+	if !q.send(q.ctx, addEvent{repo: filepath.Clean(repo), task: task, res: res}) {
 		return "", q.ctx.Err()
 	}
 
@@ -119,12 +168,11 @@ func (q *Queue) Add(repo string, task types.Task) (string, error) {
 	}
 }
 
+// Cancel stops a run and reports whether the queue accepted the request
 func (q *Queue) Cancel(ctx context.Context, runID string) error {
 	reply := make(chan error, 1)
 
-	select {
-	case q.inbox <- cancelEvent{runID: runID, err: reply}:
-	case <-ctx.Done():
+	if !q.send(ctx, cancelEvent{runID: runID, res: reply}) {
 		return ctx.Err()
 	}
 
@@ -135,6 +183,8 @@ func (q *Queue) Cancel(ctx context.Context, runID string) error {
 		return ctx.Err()
 	}
 }
+
+// Message handling
 
 func (q *Queue) handle(ev event) {
 	switch e := ev.(type) {
@@ -173,19 +223,18 @@ func (q *Queue) add(e addEvent) {
 
 	e.res <- id
 	q.cancels[r.state.ID] = cancel
-
-	q.waiting = append(q.waiting, queuedTasks{ctx: ctx, runID: id})
+	q.queuedRuns = append(q.queuedRuns, queuedRun{ctx: ctx, runID: id})
 }
 
 func (q *Queue) cancel(e cancelEvent) {
 	r, ok := q.runs[e.runID]
 	if !ok {
-		e.err <- ErrNotFound
+		e.res <- ErrNotFound
 		return
 	}
 
 	if api.IsFinilised(r.state.Status) {
-		e.err <- ErrFinished
+		e.res <- ErrFinished
 		return
 	}
 
@@ -193,7 +242,16 @@ func (q *Queue) cancel(e cancelEvent) {
 		cancel()
 	}
 
-	e.err <- nil
+	// A run that never started has no pipeline to notice the cancelled context
+	// and report back, so retire it here. Waiting for the scheduler to do it is
+	// not enough: that only happens when a container slot is free, so on a busy
+	// queue the run would sit as queued until one opened up. Its ticket stays in
+	// queuedRuns and is skipped at admission by the finalised check.
+	if r.state.StartedAt == nil {
+		q.done(doneEvent{runID: e.runID, cancelled: true})
+	}
+
+	e.res <- nil
 }
 
 func (q *Queue) stage(e stageEvent) {
@@ -212,17 +270,6 @@ func (q *Queue) stage(e stageEvent) {
 
 	r.state.Activity = ""
 	q.dirty = true
-}
-
-func (q *Queue) active() int {
-	n := 0
-	for _, r := range q.runs {
-		if r.state.StartedAt != nil && !api.IsFinilised(r.state.Status) {
-			n++
-		}
-	}
-
-	return n
 }
 
 func (q *Queue) activity(e activityEvent) {
@@ -284,69 +331,16 @@ func (q *Queue) done(e doneEvent) {
 	q.dirty = true
 }
 
-func (q *Queue) schedule() {
-	for len(q.waiting) > 0 && q.active() < q.maxContainers {
-		queued := q.waiting[0]
-		q.waiting = q.waiting[1:]
-
-		r, ok := q.runs[queued.runID]
-		if !ok || api.IsFinilised(r.state.Status) {
-			continue
-		}
-
-		if queued.ctx.Err() != nil {
-			q.done(doneEvent{runID: queued.runID, cancelled: true})
-			continue
-		}
-
-		now := time.Now()
-		r.state.Status = api.StatusStarted
-		r.state.StartedAt = &now
-		q.dirty = true
-
-		go q.execute(queued.ctx, RunSpec{
-			RunID: r.state.ID,
-			Repo:  r.state.Repo,
-			Task:  r.task,
-		})
-	}
-}
+// Execution & Additional methods
 
 func (q *Queue) execute(ctx context.Context, spec RunSpec) {
 	out, err := q.runner(ctx, spec, &reporter{queue: q, runID: spec.RunID})
-	event := doneEvent{
+	q.send(q.ctx, doneEvent{
 		runID:     spec.RunID,
 		out:       out,
 		err:       err,
 		cancelled: ctx.Err() != nil,
-	}
-
-	select {
-	case q.inbox <- event:
-	case <-q.ctx.Done():
-	}
-}
-
-func (q *Queue) evict() {
-	cutoff := time.Now().Add(-q.retention)
-
-	for id, r := range q.runs {
-		if r.state.FinishedAt != nil && r.state.FinishedAt.Before(cutoff) {
-			delete(q.runs, id)
-			q.dirty = true
-		}
-	}
-}
-
-func (q *Queue) publish() {
-	snap := q.snapshot()
-
-	select {
-	case <-q.snaps:
-	default:
-	}
-
-	q.snaps <- snap
+	})
 }
 
 func (q *Queue) snapshot() api.Snapshot {
@@ -355,4 +349,24 @@ func (q *Queue) snapshot() api.Snapshot {
 		runs = append(runs, r.state.Clone())
 	}
 	return api.Snapshot{At: time.Now(), Runs: runs}
+}
+
+func (q *Queue) activeCount() int {
+	n := 0
+	for _, r := range q.runs {
+		if r.state.StartedAt != nil && !api.IsFinilised(r.state.Status) {
+			n++
+		}
+	}
+	return n
+}
+
+// send hands event to the queue loop, abandoning the attempt if ctx is cancelled
+func (q *Queue) send(ctx context.Context, ev event) bool {
+	select {
+	case q.inbox <- ev:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

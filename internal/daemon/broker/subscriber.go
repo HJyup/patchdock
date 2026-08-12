@@ -4,16 +4,18 @@ import (
 	"sync"
 
 	"github.com/HJyup/patchdock/internal/daemon/api"
+	"github.com/HJyup/patchdock/internal/utils"
 )
 
-type Subscriber struct {
+// Subscriber represents a one-to-one connection to broker for a client
+type subscriber struct {
 	ID       uint64
 	Snapshot chan api.Snapshot
 	closed   bool
 	mu       sync.Mutex
 }
 
-func (s *Subscriber) set(snap api.Snapshot) bool {
+func (s *subscriber) set(snap api.Snapshot) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -21,22 +23,10 @@ func (s *Subscriber) set(snap api.Snapshot) bool {
 		return false
 	}
 
-	// Drain the channel, since a new snapshot incoming
-	select {
-	case <-s.Snapshot:
-	default:
-	}
-
-	// Place the value inside
-	select {
-	case s.Snapshot <- snap:
-		return true
-	default:
-		return false
-	}
+	return utils.SendLatest(s.Snapshot, snap)
 }
 
-func (s *Subscriber) close() {
+func (s *subscriber) close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -19,7 +19,13 @@ import (
 
 const patchdockDir = ".patchdock"
 
-func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (queue.Outcome, error) {
+func pipelineRunner(cli *docker.Client) queue.Runner {
+	return func(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (queue.Outcome, error) {
+		return runPipeline(ctx, cli, spec, rep)
+	}
+}
+
+func runPipeline(ctx context.Context, cli *docker.Client, spec queue.RunSpec, rep queue.Reporter) (queue.Outcome, error) {
 	dir := filepath.Join(spec.Repo, patchdockDir)
 
 	if _, err := os.Stat(dir); err != nil {
@@ -33,12 +39,6 @@ func runPipeline(ctx context.Context, spec queue.RunSpec, rep queue.Reporter) (q
 	if err != nil {
 		return queue.Outcome{}, err
 	}
-
-	cli, err := docker.NewClient()
-	if err != nil {
-		return queue.Outcome{}, fmt.Errorf("connect to docker: %w. Is the Docker daemon running", err)
-	}
-	defer cli.Close()
 
 	logger, err := auditlog.New(spec.RunID, dir)
 	if err != nil {

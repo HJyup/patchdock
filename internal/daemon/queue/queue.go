@@ -23,8 +23,9 @@ var (
 )
 
 type Config struct {
-	Runner    Runner
-	Retention time.Duration
+	Runner        Runner
+	Retention     time.Duration
+	MaxContainers int
 }
 
 type run struct {
@@ -38,8 +39,9 @@ type Queue struct {
 	runner Runner
 
 	// defines retention policy for finilised runs
-	retention time.Duration
-	ctx       context.Context
+	retention     time.Duration
+	maxContainers int
+	ctx           context.Context
 
 	runs map[string]*run
 	// define all nesseary context cancel function so it's easy to cancel certain runs
@@ -51,9 +53,10 @@ type Queue struct {
 
 func New(ctx context.Context, cfg Config) *Queue {
 	return &Queue{
-		inbox:  make(chan event, inboxSize),
-		snaps:  make(chan api.Snapshot, 1),
-		runner: cfg.Runner,
+		inbox:         make(chan event, inboxSize),
+		snaps:         make(chan api.Snapshot, 1),
+		runner:        cfg.Runner,
+		maxContainers: cfg.MaxContainers,
 
 		retention: cfg.Retention,
 		ctx:       ctx,
@@ -266,7 +269,11 @@ func (q *Queue) done(e doneEvent) {
 		}
 	}
 
-	delete(q.cancels, e.runID)
+	if cancel, ok := q.cancels[e.runID]; ok {
+		cancel()
+		delete(q.cancels, e.runID)
+	}
+
 	q.dirty = true
 }
 

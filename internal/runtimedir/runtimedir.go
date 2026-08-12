@@ -46,6 +46,10 @@ func (d Dir) Socket() string {
 	return filepath.Join(d.root, "dock.sock")
 }
 
+func (d Dir) Config() string {
+	return filepath.Join(d.root, "config.json")
+}
+
 func (d Dir) Lock() string {
 	return filepath.Join(d.root, "dock.lock")
 }

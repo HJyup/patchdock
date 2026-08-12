@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/HJyup/patchdock/internal/daemon/broker"
+	"github.com/HJyup/patchdock/internal/daemon/config"
 	"github.com/HJyup/patchdock/internal/daemon/queue"
 	"github.com/HJyup/patchdock/internal/lock"
 	"github.com/HJyup/patchdock/internal/runtimedir"
@@ -49,7 +50,12 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) error {
 	}
 	defer listener.Close()
 
-	q := queue.New(ctx, queue.Config{Runner: runPipeline, Retention: 15 * time.Minute})
+	cfg, err := config.Load(dir.Config())
+	if err != nil {
+		return err
+	}
+
+	q := queue.New(ctx, queue.Config{Runner: runPipeline, Retention: cfg.Retention.Duration(), MaxContainers: cfg.MaxContainers})
 	ch := q.Snaps()
 
 	b := broker.New(ch)

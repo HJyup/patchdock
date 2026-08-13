@@ -1,5 +1,5 @@
 ---
-"@hjyup/patchdock-sdk": minor
+"@patchdock/sdk": minor
 ---
 
 First public alpha of the Patchdock agent SDK: stage definitions (`definePlanner`,

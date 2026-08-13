@@ -82,10 +82,10 @@ jobs:
           branch: changeset-release/main
           add-paths: sdk
           delete-branch: true
-          commit-message: "chore(sdk): version @hjyup/patchdock-sdk"
-          title: "chore(sdk): release @hjyup/patchdock-sdk"
+          commit-message: "chore(sdk): version @patchdock/sdk"
+          title: "chore(sdk): release @patchdock/sdk"
           body: |
-            Applies the pending changesets for `@hjyup/patchdock-sdk`.
+            Applies the pending changesets for `@patchdock/sdk`.
 
             Merging this pull request publishes the new version to npm. Review
             the version bump and `sdk/CHANGELOG.md` before merging; to hold the

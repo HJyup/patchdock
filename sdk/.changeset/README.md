@@ -1,6 +1,6 @@
 # Changesets
 
-This directory holds the pending release notes for `@hjyup/patchdock-sdk`. Every change
+This directory holds the pending release notes for `@patchdock/sdk`. Every change
 that should reach npm gets a changeset: a small markdown file recording the bump
 type (`patch`, `minor`, `major`) and a line for the changelog.
 

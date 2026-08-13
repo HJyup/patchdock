@@ -11,10 +11,6 @@ export interface StageLogEvent {
   [field: string]: unknown;
 }
 
-// Mount paths handed to the agent:
-//   Planner  - repo
-//   Executor - workspace
-//   Reviewer - workspace (read only)
 interface MountPaths {
   repo?: string;
   workspace?: string;

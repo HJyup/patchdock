@@ -25,7 +25,8 @@ RUN git config --system --add safe.directory '*' \
 RUN npm install -g "@openai/codex@${CODEX_VERSION}"
 
 # ── SDK runtime ───────────────────────────────────────────────────────────────
-# Agents are .ts files imported unbuilt, so tsx is required.
+# The agents mounted at /agents are .ts files imported unbuilt, so the harness
+# process itself has to run under tsx.
 RUN npm install -g "tsx@${TSX_VERSION}"
 
 # The SDK comes from this directory's node_modules (`pnpm install` in
@@ -33,8 +34,7 @@ RUN npm install -g "tsx@${TSX_VERSION}"
 # resolve a bare "@patchdock/sdk".
 COPY node_modules /node_modules
 
-# The host passes no command, so this line is the whole contract.
-ENTRYPOINT ["tsx", "/node_modules/@patchdock/sdk/runtime/main.ts"]
+ENTRYPOINT ["tsx", "/node_modules/@patchdock/sdk/dist/runtime/main.js"]
 
 # ── Stream hygiene ────────────────────────────────────────────────────────────
 # No tty: stop git prompting, and keep ANSI and spinners out of the JSON logs.

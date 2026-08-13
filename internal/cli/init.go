@@ -15,8 +15,9 @@ var force bool
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Scaffold .patchdock/ in a repository",
-	Long: `Writes .patchdock/ with a config, a Dockerfile and three working
-			agents, so "dock init" followed by "dock run" works as-is.
+	Long: `Writes .patchdock/ with a config, a Dockerfile, a package.json pinning the
+			agent SDK, and three working agents, so "dock init", "npm install" and
+			"dock run" work as-is.
 			Refuses to touch an existing .patchdock/ unless --force is given.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -32,7 +33,10 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "created %s\n", filepath.Join(repoDir, ".patchdock"))
+		dir := filepath.Join(repoDir, ".patchdock")
+		fmt.Fprintf(cmd.OutOrStdout(), "created %s\n\n", dir)
+
+		fmt.Fprintf(cmd.OutOrStdout(), "next: install the agent SDK\n\n  cd %s && npm install\n", dir)
 		return nil
 	},
 }

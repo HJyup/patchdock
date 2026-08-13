@@ -33,6 +33,8 @@ archives:
 
 homebrew_casks:
   - name: patchdock
+    binaries:
+      - dock
     repository:
       owner: HJyup
       name: homebrew-tap

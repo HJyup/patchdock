@@ -9,25 +9,11 @@ commit on a `patchdock/…` branch in your repository, ready to review and merge
 
 ## Getting started
 
-> [!NOTE]
-> The `dock` binary is not yet distributed through Homebrew, and is installed
-> from source for now. Distribution will be added after critical work is
-> complete, including Docker runtime hardening, cancellation support, and
-> daemon lifecycle improvements.
-
-Building Patchdock requires Go; running it requires a Docker Engine. Install
-the `dock` binary from source:
+Running Patchdock requires a Docker Engine. Install the `dock` binary with
+Homebrew:
 
 ```bash
-git clone https://github.com/HJyup/patchdock.git
-cd patchdock
-go install ./cmd/dock
-```
-
-Make sure the Go binary directory is on your `PATH`:
-
-```bash
-export PATH="$(go env GOPATH)/bin:$PATH"
+brew install HJyup/tap/patchdock
 ```
 
 Then initialise the repository you want agents to work on:

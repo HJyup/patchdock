@@ -61,7 +61,9 @@ dock
 | `dock` | Open the interactive terminal interface on the task input. Submit tasks there and switch to the live dashboard to follow runs across repositories. |
 | `dock watch` | Open the terminal interface directly on the live dashboard. |
 | `dock "<prompt>"` | Queue the task, print its run ID, and exit without opening the terminal interface. Starts the daemon on demand. |
-| `dock --repo <path> "<prompt>"` | Queue the task against another repository instead of the current directory. |
+
+| Command | Description |
+| --- | --- |
 | `dock cancel <run-id>` | Cancel a queued or running run from any terminal. The run stops at its current stage and its container is removed. |
 | `dock daemon status` | Show daemon health, uptime, process ID, socket, and log path. |
 | `dock daemon run` | Run the daemon in the foreground for debugging. |

@@ -26,6 +26,9 @@ To add the SDK to an existing TypeScript project instead:
 pnpm add @patchdock/sdk
 ```
 
+The SDK is in alpha, so releases land on the `alpha` dist-tag and the API may
+still change between versions. Pin an exact version if you need stability.
+
 ## Define agents and their contracts
 
 Every agent file must default-export one of the three stage definitions:

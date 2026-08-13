@@ -1,0 +1,143 @@
+name: Release SDK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "sdk/**"
+      - ".github/workflows/release-sdk.yml"
+  workflow_dispatch:
+
+
+permissions: {}
+
+concurrency:
+  group: release-sdk
+  cancel-in-progress: false
+
+jobs:
+  status:
+    name: Check for pending changesets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      pending: ${{ steps.check.outputs.pending }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Count changesets
+        id: check
+        run: |
+          count=$(find sdk/.changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')
+          echo "$count pending changeset(s)"
+          if [ "$count" -gt 0 ]; then
+            echo "pending=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pending=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  version:
+    name: Open release pull request
+    needs: status
+    if: needs.status.outputs.pending == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the release branch
+      pull-requests: write # open or update the release pull request
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: sdk/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: sdk
+
+      - name: Apply changesets
+        run: pnpm changeset version
+        working-directory: sdk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Open or update release pull request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: changeset-release/main
+          add-paths: sdk
+          delete-branch: true
+          commit-message: "chore(sdk): version @hjyup/patchdock-sdk"
+          title: "chore(sdk): release @hjyup/patchdock-sdk"
+          body: |
+            Applies the pending changesets for `@hjyup/patchdock-sdk`.
+
+            Merging this pull request publishes the new version to npm. Review
+            the version bump and `sdk/CHANGELOG.md` before merging; to hold the
+            release back, close this pull request and it will be recreated on
+            the next push to `main`.
+
+  publish:
+    name: Publish to npm
+    needs: status
+    if: needs.status.outputs.pending == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the release tag
+      id-token: write # npm trusted publishing
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: sdk/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: sdk
+
+      - name: Test
+        run: pnpm test
+        working-directory: sdk
+
+      - name: Build
+        run: pnpm run build
+        working-directory: sdk
+
+      - name: Configure git identity
+        # changeset publish tags each released package, and annotated tags need an author.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Publish
+        run: pnpm changeset publish
+        working-directory: sdk
+
+      - name: Push release tags
+        run: git push origin --tags

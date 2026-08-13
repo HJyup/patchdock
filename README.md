@@ -10,9 +10,10 @@ commit on a `patchdock/…` branch in your repository, ready to review and merge
 ## Getting started
 
 > [!NOTE]
-> Patchdock is not yet distributed through Homebrew or npm. Distribution will
-> be added after critical work is complete, including Docker runtime
-> hardening, cancellation support, and daemon lifecycle improvements.
+> The `dock` binary is not yet distributed through Homebrew, and is installed
+> from source for now. Distribution will be added after critical work is
+> complete, including Docker runtime hardening, cancellation support, and
+> daemon lifecycle improvements.
 
 Building Patchdock requires Go; running it requires a Docker Engine. Install
 the `dock` binary from source:
@@ -43,15 +44,26 @@ definitions Patchdock uses during execution:
 .patchdock/
 ├── config.yml
 ├── Dockerfile
+├── package.json
+├── .gitignore
 ├── planner.ts
 ├── executor.ts
 └── reviewer.ts
+```
+
+Install the agent SDK. The Dockerfile copies this `node_modules` tree into the
+agent image, so it has to exist before the first run:
+
+```bash
+cd .patchdock
+npm install
 ```
 
 Adapt the Dockerfile to your repository's toolchain, then open Patchdock and
 submit your first task:
 
 ```bash
+cd ..
 dock
 ```
 

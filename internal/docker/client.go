@@ -50,10 +50,19 @@ type Client struct {
 	cli *client.Client
 }
 
-func NewClient() (*Client, error) {
+func NewClient(ctx context.Context) (*Client, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish connection with docker daemon: %w", err)
+	}
+
+	pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	_, err = cli.Ping(pctx)
+	if err != nil {
+		cli.Close()
+		return nil, fmt.Errorf("failed to get a ping: %w", err)
 	}
 
 	return &Client{

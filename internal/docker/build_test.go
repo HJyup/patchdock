@@ -15,7 +15,7 @@ import (
 // guaranteed, so an unreachable daemon is a failure — never a silent skip.
 func newTestClient(t *testing.T) *Client {
 	t.Helper()
-	c, err := NewClient()
+	c, err := NewClient(t.Context())
 	if err != nil {
 		skipOrFail(t, "docker not available: %v", err)
 	}

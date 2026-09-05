@@ -58,7 +58,7 @@ func RunServer(ctx context.Context, dir runtimedir.Dir) error {
 
 	// Constructing the client does not dial the daemon — connectivity failures
 	// still surface per run, where they name the stage that hit them.
-	cli, err := docker.NewClient()
+	cli, err := docker.NewClient(ctx)
 	if err != nil {
 		return fmt.Errorf("connect to docker: %w", err)
 	}
